@@ -3,7 +3,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-$options = [
+$didit_verify_options = [
 	'didit_mode',
 	'didit_unilink_url',
 	'didit_workflow_id',
@@ -33,6 +33,6 @@ $options = [
 	'didit_vendor_data',
 ];
 
-foreach ( $options as $option ) {
-	delete_option( $option );
+foreach ( $didit_verify_options as $didit_verify_option ) {
+	delete_option( $didit_verify_option );
 }

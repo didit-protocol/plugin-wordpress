@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -57,6 +57,16 @@ Didit Verify lets you require identity verification on your WordPress site. Drop
 * Per-user rate limit: 10 sessions/hour
 * Per-IP rate limit: 3 sessions/hour (guests)
 * All input whitelisted and sanitized
+
+== Third-Party Service ==
+
+This plugin connects to the [Didit](https://didit.me) identity verification service to process user verifications. When a verification session is created (API mode), the plugin sends data to Didit's servers. When the verification UI is displayed, an iframe loads content from `verify.didit.me`.
+
+* Service: [https://didit.me](https://didit.me)
+* Terms of Use: [https://didit.me/en/terms/identity-verification/](https://didit.me/en/terms/identity-verification/)
+* Privacy Policy: [https://didit.me/en/terms/privacy-policy/](https://didit.me/en/terms/privacy-policy/)
+
+No data is sent to Didit until the site administrator configures the plugin and a user initiates verification.
 
 == Installation ==
 
@@ -162,6 +172,13 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 == Changelog ==
 
+= 0.1.1 =
+* Bundle SDK JavaScript locally instead of loading from CDN.
+* Add third-party service disclosure (Didit Terms of Use and Privacy Policy).
+* Add all 49 supported languages to the language selector.
+* Fix Plugin Check (PCP) errors: output escaping, translators comment, variable prefixes.
+* Wrap debug logging behind WP_DEBUG flag.
+
 = 0.1.0 =
 * Initial release.
 * UniLink and API Session modes.
@@ -178,6 +195,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.1.1 =
+SDK bundled locally, third-party disclosure, all 49 languages, Plugin Check compliance.
 
 = 0.1.0 =
 First release.

@@ -13,6 +13,16 @@ Identity verification for WordPress & WooCommerce using the [Didit SDK](https://
 | **Customizable** | Button colors, text, padding, radius — all configurable with live preview |
 | **Secure** | API key stays server-side; CSRF nonce + rate limiting on session endpoint |
 
+## Third-Party Service
+
+This plugin connects to the [Didit](https://didit.me) identity verification service. When a verification session is created (API mode), the plugin sends data to Didit's servers. The verification UI loads in an iframe from `verify.didit.me`.
+
+- Service: [https://didit.me](https://didit.me)
+- Terms of Use: [https://didit.me/en/terms/identity-verification/](https://didit.me/en/terms/identity-verification/)
+- Privacy Policy: [https://didit.me/en/terms/privacy-policy/](https://didit.me/en/terms/privacy-policy/)
+
+No data is sent until the administrator configures credentials and a user initiates verification.
+
 ## Quick Start
 
 ### 1. Start the dev environment
@@ -274,11 +284,13 @@ The `expected_details` (name, country, address) are sent from the checkout form.
 
 ## Customization
 
-### Change the SDK CDN URL
+### Override the SDK JS file
+
+The SDK is bundled locally in `assets/js/didit-sdk.umd.min.js`. To use a different version:
 
 ```php
 add_filter( 'didit_sdk_url', function () {
-    return 'https://unpkg.com/@didit-protocol/sdk-web@0.1.5/dist/didit-sdk.umd.min.js';
+    return 'https://unpkg.com/@didit-protocol/sdk-web@0.2.0/dist/didit-sdk.umd.min.js';
 } );
 ```
 

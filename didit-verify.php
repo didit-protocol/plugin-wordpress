@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://didit.me
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.1.0
+ * Version:     0.1.1
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.1.0');
+define('DIDIT_VERIFY_VERSION', '0.1.1');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -728,7 +728,9 @@ final class Didit_Verify
 
     if ($status_code < 200 || $status_code >= 300) {
       $raw = wp_remote_retrieve_body($response);
-      error_log('Didit API error (' . $status_code . '): ' . $raw);
+      if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+        error_log('Didit API error (' . $status_code . '): ' . $raw); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+      }
       $msg = $data['detail'] ?? $data['error'] ?? __('Didit API error', 'didit-verify');
       return new WP_Error('api_error', $msg, ['status' => $status_code]);
     }
@@ -1096,10 +1098,10 @@ final class Didit_Verify
       return;
     }
 
-    $sdk_url = apply_filters('didit_sdk_url', 'https://unpkg.com/@didit-protocol/sdk-web@0.1.5/dist/didit-sdk.umd.min.js');
+    $sdk_url = apply_filters('didit_sdk_url', DIDIT_VERIFY_URL . 'assets/js/didit-sdk.umd.min.js');
 
     wp_enqueue_style('didit-verify', DIDIT_VERIFY_URL . 'assets/css/didit-verify.css', [], DIDIT_VERIFY_VERSION);
-    wp_enqueue_script('didit-sdk', $sdk_url, [], null, true);
+    wp_enqueue_script('didit-sdk', $sdk_url, [], DIDIT_VERIFY_VERSION, true);
     wp_enqueue_script('didit-verify', DIDIT_VERIFY_URL . 'assets/js/didit-verify.js', ['didit-sdk'], DIDIT_VERIFY_VERSION, true);
 
     wp_localize_script('didit-verify', 'diditConfig', [
@@ -1240,6 +1242,7 @@ final class Didit_Verify
     $verified = get_user_meta($user_id, '_didit_verified', true);
     if ($verified) {
       $date = get_user_meta($user_id, '_didit_verified_at', true);
+      /* translators: %s: date when user was verified */
       $title = $date ? sprintf(__('Verified on %s', 'didit-verify'), $date) : __('Verified', 'didit-verify');
       return '<span style="color:#10b981;font-size:1.2em;" title="' . esc_attr($title) . '">&#10004;</span>';
     }
@@ -1280,8 +1283,8 @@ final class Didit_Verify
       <p style="color:#666; font-size:0.9em;">
         <?php esc_html_e('Please verify your identity before placing your order.', 'didit-verify'); ?>
       </p>
-      <button type="button" class="didit-verify-btn" data-text="<?php echo $btn_text; ?>"
-        data-success="<?php echo $btn_success; ?>" data-wc="1" <?php if ($is_embedded)
+      <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" <?php if ($is_embedded)
              echo ' data-container="didit-wc-embed"'; ?>>
         <?php echo esc_html(get_option('didit_btn_text', 'Verify your Identity')); ?>
       </button>
