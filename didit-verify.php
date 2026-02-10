@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Didit Verify
- * Plugin URI:  https://didit.me
+ * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
  * Version:     0.1.1
  * Author:      Didit
