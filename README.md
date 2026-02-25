@@ -284,13 +284,11 @@ The `expected_details` (name, country, address) are sent from the checkout form.
 
 ## Customization
 
-### Override the SDK JS file
-
-The SDK is bundled locally in `assets/js/didit-sdk.umd.min.js`. To use a different version:
+### Change the SDK CDN URL
 
 ```php
 add_filter( 'didit_sdk_url', function () {
-    return 'https://unpkg.com/@didit-protocol/sdk-web@0.2.0/dist/didit-sdk.umd.min.js';
+    return 'https://unpkg.com/@didit-protocol/sdk-web@0.1.6/dist/didit-sdk.umd.min.js';
 } );
 ```
 

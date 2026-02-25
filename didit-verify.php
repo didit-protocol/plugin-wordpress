@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.1.1
+ * Version:     0.1.2
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.1.1');
+define('DIDIT_VERIFY_VERSION', '0.1.2');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -37,6 +37,7 @@ final class Didit_Verify
   {
     add_action('admin_menu', [$this, 'admin_menu']);
     add_action('admin_init', [$this, 'admin_register_settings']);
+    add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
 
     add_filter('manage_users_columns', [$this, 'users_column']);
     add_filter('manage_users_custom_column', [$this, 'users_column_content'], 10, 3);
@@ -134,6 +135,20 @@ final class Didit_Verify
     add_settings_field('didit_wc_send_billing', __('Send Billing Data', 'didit-verify'), [$this, 'field_wc_send_billing'], 'didit-verify', 'didit_woocommerce');
   }
 
+  public function admin_enqueue_scripts($hook)
+  {
+    if ('settings_page_didit-verify' !== $hook) {
+      return;
+    }
+    wp_enqueue_script(
+      'didit-admin',
+      DIDIT_VERIFY_URL . 'assets/js/didit-admin.js',
+      [],
+      DIDIT_VERIFY_VERSION,
+      true
+    );
+  }
+
   public function field_mode()
   {
     $v = get_option('didit_mode', 'unilink');
@@ -167,7 +182,7 @@ final class Didit_Verify
       '<input type="text" name="didit_workflow_id" value="%s" class="regular-text" />
 			<p class="description">%s</p>',
       esc_attr(get_option('didit_workflow_id', '')),
-      esc_html__('Required for API mode. Found in Didit Console → Workflow settings.', 'didit-verify')
+      esc_html__('Required for API mode. Found in Didit Console → Workflows.', 'didit-verify')
     );
   }
 
@@ -177,7 +192,7 @@ final class Didit_Verify
       '<input type="password" name="didit_api_key" value="%s" class="regular-text" autocomplete="off" />
 			<p class="description">%s</p>',
       esc_attr(get_option('didit_api_key', '')),
-      esc_html__('Stored server-side only — never sent to the browser.', 'didit-verify')
+      esc_html__('Found in Didit Console → API & Webhooks. Stored server-side only — never sent to the browser.', 'didit-verify')
     );
   }
 
@@ -196,12 +211,7 @@ final class Didit_Verify
 			<div id="didit-vendor-prefix-row" style="margin-top:0.5rem;%s">
 				<input type="text" name="didit_vendor_data_prefix" value="%s" class="regular-text" placeholder="mystore-" />
 				<p class="description">%s</p>
-			</div>
-			<script>
-			document.getElementById("didit_vendor_data_mode").addEventListener("change",function(){
-				document.getElementById("didit-vendor-prefix-row").style.display=this.value==="custom"?"":"none";
-			});
-			</script>',
+			</div>',
       selected($mode, 'user_id', false),
       esc_html__('WordPress User ID (e.g. wp-42)', 'didit-verify'),
       selected($mode, 'user_email', false),
@@ -404,35 +414,6 @@ final class Didit_Verify
         </button>
       </div>
     </div>
-    <script>
-      document.addEventListener('DOMContentLoaded', function () {
-        var preview = document.getElementById('didit-btn-preview');
-        if (!preview) return;
-
-        function bind(name, prop, unit) {
-          var el = document.querySelector('[name="' + name + '"]');
-          if (!el) return;
-          el.addEventListener('input', function () {
-            if (prop === 'textContent') { preview.textContent = this.value; return; }
-            if (prop === 'padding') {
-              var pv = document.querySelector('[name="didit_btn_padding_v"]');
-              var ph = document.querySelector('[name="didit_btn_padding_h"]');
-              preview.style.padding = (pv ? pv.value : 12) + 'px ' + (ph ? ph.value : 24) + 'px';
-              return;
-            }
-            preview.style[prop] = this.value + (unit || '');
-          });
-        }
-
-        bind('didit_btn_text', 'textContent');
-        bind('didit_btn_bg_color', 'background');
-        bind('didit_btn_text_color', 'color');
-        bind('didit_btn_border_radius', 'borderRadius', 'px');
-        bind('didit_btn_padding_v', 'padding');
-        bind('didit_btn_padding_h', 'padding');
-        bind('didit_btn_font_size', 'fontSize', 'px');
-      });
-    </script>
     <?php
   }
 

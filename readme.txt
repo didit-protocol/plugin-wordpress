@@ -1,10 +1,10 @@
 === Didit Verify ===
-Contributors: didit
+Contributors: alexdidit
 Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -62,9 +62,16 @@ Didit Verify lets you require identity verification on your WordPress site. Drop
 
 This plugin connects to the [Didit](https://didit.me) identity verification service to process user verifications. When a verification session is created (API mode), the plugin sends data to Didit's servers. When the verification UI is displayed, an iframe loads content from `verify.didit.me`.
 
+This plugin bundles the [Didit Web SDK](https://www.npmjs.com/package/@didit-protocol/sdk-web) (version 0.1.6) as `assets/js/didit-sdk.umd.min.js`. The full unminified source code is publicly available at the GitHub repository and npm package linked below.
+
 * Service: [https://didit.me](https://didit.me)
+* SDK source code: [https://github.com/didit-protocol/sdk-web](https://github.com/didit-protocol/sdk-web)
+* SDK npm package: [https://www.npmjs.com/package/@didit-protocol/sdk-web](https://www.npmjs.com/package/@didit-protocol/sdk-web)
+* SDK license: MIT
 * Terms of Use: [https://didit.me/en/terms/identity-verification/](https://didit.me/en/terms/identity-verification/)
 * Privacy Policy: [https://didit.me/en/terms/privacy-policy/](https://didit.me/en/terms/privacy-policy/)
+
+The SDK can be rebuilt from source with `npm install && npm run build` (uses Rollup). See the GitHub repository for full build instructions.
 
 No data is sent to Didit until the site administrator configures the plugin and a user initiates verification.
 
@@ -86,7 +93,7 @@ Enter your Workflow ID and API Key from the [Didit Console](https://business.did
 
 = Where do I get a Workflow ID and API Key? =
 
-Sign up at [business.didit.me](https://business.didit.me), create a verification workflow, and copy the Workflow ID and API Key from the workflow settings.
+Sign up at [business.didit.me](https://business.didit.me), create a verification workflow and copy the Workflow ID. Then go to API & Webhooks and copy your API Key.
 
 = What is the difference between UniLink and API mode? =
 
@@ -172,6 +179,12 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 == Changelog ==
 
+= 0.1.2 =
+* Update Didit Web SDK to version 0.1.6.
+* Document bundled SDK source code repository, license, and build instructions in readme.
+* Move admin inline scripts to enqueued JavaScript file.
+* Fix contributors username.
+
 = 0.1.1 =
 * Bundle SDK JavaScript locally instead of loading from CDN.
 * Add third-party service disclosure (Didit Terms of Use and Privacy Policy).
@@ -195,6 +208,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.1.2 =
+SDK updated to 0.1.6, source code documented, admin scripts properly enqueued.
 
 = 0.1.1 =
 SDK bundled locally, third-party disclosure, all 49 languages, Plugin Check compliance.
