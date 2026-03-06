@@ -179,6 +179,10 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 == Changelog ==
 
+= 0.1.3 =
+* Update Didit Web SDK to version 0.1.8.
+* Improved support for Woocommerce block based checkout on new versions.
+
 = 0.1.2 =
 * Update Didit Web SDK to version 0.1.6.
 * Document bundled SDK source code repository, license, and build instructions in readme.
@@ -208,6 +212,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.1.3 =
+SDK updated to 0.1.8. Improved support for Woocommerce block based checkout on new versions.
 
 = 0.1.2 =
 SDK updated to 0.1.6, source code documented, admin scripts properly enqueued.

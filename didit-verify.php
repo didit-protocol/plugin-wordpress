@@ -24,6 +24,8 @@ define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 final class Didit_Verify
 {
 
+  private $block_session_id = '';
+
   public static function init()
   {
     static $instance = null;
@@ -1245,6 +1247,11 @@ final class Didit_Verify
     add_action('woocommerce_checkout_process', [$this, 'wc_validate_checkout']);
     add_action('woocommerce_checkout_update_order_meta', [$this, 'wc_save_order_meta']);
     add_action('woocommerce_admin_order_data_after_billing_address', [$this, 'wc_show_order_meta']);
+
+    // Block-based checkout support (WooCommerce 8.3+).
+    add_filter('render_block_woocommerce/checkout-actions-block', [$this, 'wc_block_checkout_field']);
+    add_filter('rest_authentication_errors', [$this, 'wc_block_validate_checkout']);
+    add_action('woocommerce_store_api_checkout_order_processed', [$this, 'wc_block_save_order_meta']);
   }
 
   public function wc_checkout_field()
@@ -1322,6 +1329,82 @@ final class Didit_Verify
         esc_html($session_id)
       );
     }
+  }
+
+  /* ── Block-based checkout (WooCommerce 8.3+) ── */
+
+  public function wc_block_checkout_field($block_content)
+  {
+    if (!get_option('didit_wc_required', false)) {
+      return $block_content;
+    }
+
+    $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
+    $btn_text = esc_attr(get_option('didit_btn_text', 'Verify your Identity'));
+    $btn_success = esc_attr(get_option('didit_btn_success_text', 'Identity Verified ✓'));
+
+    ob_start();
+    ?>
+    <div id="didit-wc-verify" class="didit-verify-wrap"
+      style="margin: 1.5em 0; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
+      <h3 style="margin-top:0;"><?php esc_html_e('Identity Verification', 'didit-verify'); ?></h3>
+      <p style="color:#666; font-size:0.9em;">
+        <?php esc_html_e('Please verify your identity before placing your order.', 'didit-verify'); ?>
+      </p>
+      <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1"<?php if ($is_embedded)
+             echo ' data-container="didit-wc-embed"'; ?>>
+        <?php echo esc_html(get_option('didit_btn_text', 'Verify your Identity')); ?>
+      </button>
+      <?php if ($is_embedded): ?>
+        <div class="didit-embed-container" id="didit-wc-embed"></div>
+      <?php endif; ?>
+    </div>
+    <?php
+    $verification_html = ob_get_clean();
+
+    return $verification_html . $block_content;
+  }
+
+  public function wc_block_validate_checkout($result)
+  {
+    if (!get_option('didit_wc_required', false)) {
+      return $result;
+    }
+
+    if (!isset($_SERVER['REQUEST_METHOD']) || 'POST' !== $_SERVER['REQUEST_METHOD']) {
+      return $result;
+    }
+
+    $rest_route = $GLOBALS['wp']->query_vars['rest_route'] ?? '';
+    if (!preg_match('#/wc/store(?:/v\d+)?/checkout$#', $rest_route)) {
+      return $result;
+    }
+
+    $raw = WP_REST_Server::get_raw_data();
+    $body = json_decode($raw, true);
+    $session_id = $body['extensions']['didit-verify']['sessionId'] ?? '';
+
+    if (empty($session_id)) {
+      return new WP_Error(
+        'didit_verification_required',
+        __('Please complete identity verification before placing your order.', 'didit-verify'),
+        ['status' => 403]
+      );
+    }
+
+    $this->block_session_id = sanitize_text_field($session_id);
+
+    return $result;
+  }
+
+  public function wc_block_save_order_meta($order)
+  {
+    if (empty($this->block_session_id)) {
+      return;
+    }
+    $order->update_meta_data('_didit_session_id', $this->block_session_id);
+    $order->save();
   }
 }
 

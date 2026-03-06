@@ -23,6 +23,14 @@
       hidden.value = result.type === "completed" ? result.session.sessionId : "";
     }
 
+    if (window.wp && window.wp.data && window.wp.data.dispatch) {
+      try {
+        wp.data.dispatch("wc/store/checkout").setExtensionData("didit-verify", {
+          sessionId: result.type === "completed" && result.session ? result.session.sessionId : ""
+        });
+      } catch (e) {}
+    }
+
     if (cfg.restUrl && cfg.nonce) {
       fetch(cfg.restUrl.replace("/session", "/verify"), {
         method: "POST",
@@ -43,6 +51,28 @@
   };
 
   function getWcBillingData() {
+    if (window.wp && window.wp.data && window.wp.data.select) {
+      try {
+        var storeCart = wp.data.select("wc/store/cart");
+        if (storeCart && storeCart.getCustomerData) {
+          var billing = (storeCart.getCustomerData().billingAddress) || {};
+          var cd = {};
+          var ed = {};
+          if (billing.email) cd.email = billing.email;
+          if (billing.phone) cd.phone = billing.phone;
+          if (billing.first_name) ed.first_name = billing.first_name;
+          if (billing.last_name) ed.last_name = billing.last_name;
+          if (billing.country) ed.country = billing.country;
+          var addrParts = [billing.address_1, billing.address_2, billing.city, billing.state, billing.postcode].filter(Boolean);
+          if (addrParts.length) ed.address = addrParts.join(", ");
+          var storeData = {};
+          if (Object.keys(cd).length) storeData.contact_details = cd;
+          if (Object.keys(ed).length) storeData.expected_details = ed;
+          if (Object.keys(storeData).length) return storeData;
+        }
+      } catch (e) {}
+    }
+
     var val = function (id) {
       var el = document.getElementById(id);
       return el ? el.value.trim() : "";
