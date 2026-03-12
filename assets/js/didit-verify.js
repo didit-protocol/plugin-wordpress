@@ -7,10 +7,21 @@
   var DiditSdk = window.DiditSDK.DiditSdk;
 
   DiditSdk.shared.onComplete = function (result) {
+    var status = result.session ? result.session.status : "";
+
     document.querySelectorAll(".didit-verify-btn").forEach(function (btn) {
-      if (result.type === "completed") {
+      btn.classList.remove("didit-verified", "didit-declined", "didit-in-review");
+
+      if (result.type === "completed" && status === "Approved") {
         btn.textContent = btn.dataset.success || "Verified";
         btn.classList.add("didit-verified");
+        btn.disabled = true;
+      } else if (result.type === "completed" && status === "Declined") {
+        btn.textContent = btn.dataset.text || "Verify Identity";
+        btn.disabled = false;
+      } else if (result.type === "completed") {
+        btn.textContent = "Verification In Review";
+        btn.classList.add("didit-in-review");
         btn.disabled = true;
       } else {
         btn.textContent = btn.dataset.text || "Verify Identity";

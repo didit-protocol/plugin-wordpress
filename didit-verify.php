@@ -744,10 +744,15 @@ final class Didit_Verify
     $status = sanitize_text_field($input['status'] ?? '');
 
     if ('completed' === $type) {
-      update_user_meta($user_id, '_didit_verified', 1);
       update_user_meta($user_id, '_didit_session_id', $session_id);
       update_user_meta($user_id, '_didit_status', $status);
       update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
+
+      if ('Approved' === $status) {
+        update_user_meta($user_id, '_didit_verified', 1);
+      } else {
+        delete_user_meta($user_id, '_didit_verified');
+      }
 
       do_action('didit_verification_completed', $user_id, $session_id, $status);
     } elseif ('cancelled' === $type) {
@@ -1110,7 +1115,9 @@ final class Didit_Verify
     $css = ".didit-verify-btn{background:{$bg};color:{$tc};border:none;border-radius:{$rad}px;padding:{$pv}px {$ph}px;font-size:{$fs}px;font-weight:600;font-family:inherit;cursor:pointer;line-height:1.4;transition:opacity .2s,box-shadow .2s;}"
       . ".didit-verify-btn:hover{opacity:.9;box-shadow:0 4px 12px rgba(0,0,0,.2);}"
       . ".didit-verify-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}"
-      . ".didit-verify-btn.didit-verified{background:#10b981;}";
+      . ".didit-verify-btn.didit-verified{background:#41D97F;opacity:1;}"
+      . ".didit-verify-btn.didit-in-review{background:#F59E0B;opacity:1;}"
+      . ".didit-verify-btn.didit-declined{background:{$bg};}";
 
     wp_add_inline_style('didit-verify', $css);
   }
@@ -1172,6 +1179,8 @@ final class Didit_Verify
     $a = shortcode_atts([
       'verified_text' => __('Identity Verified', 'didit-verify'),
       'unverified_text' => __('Not Verified', 'didit-verify'),
+      'declined_text' => __('Verification Declined', 'didit-verify'),
+      'pending_text' => __('Verification In Review', 'didit-verify'),
       'login_text' => __('Please log in', 'didit-verify'),
     ], $atts, 'didit_status');
 
@@ -1179,10 +1188,18 @@ final class Didit_Verify
       return sprintf('<span class="didit-status didit-not-logged-in">%s</span>', esc_html($a['login_text']));
     }
 
-    $verified = get_user_meta(get_current_user_id(), '_didit_verified', true);
-    if ($verified) {
-      return sprintf('<span class="didit-status didit-verified">%s</span>', esc_html($a['verified_text']));
+    $status = get_user_meta(get_current_user_id(), '_didit_status', true);
+
+    if ('Approved' === $status) {
+      return sprintf('<span class="didit-status didit-status-approved" style="color:#41D97F;">%s</span>', esc_html($a['verified_text']));
     }
+    if ('Declined' === $status) {
+      return sprintf('<span class="didit-status didit-status-declined" style="color:#FF4141;">%s</span>', esc_html($a['declined_text']));
+    }
+    if ($status && 'Approved' !== $status && 'Declined' !== $status) {
+      return sprintf('<span class="didit-status didit-status-pending" style="color:#F59E0B;">%s</span>', esc_html($a['pending_text']));
+    }
+
     return sprintf('<span class="didit-status didit-unverified">%s</span>', esc_html($a['unverified_text']));
   }
 
@@ -1199,9 +1216,16 @@ final class Didit_Verify
       );
     }
 
-    $verified = get_user_meta(get_current_user_id(), '_didit_verified', true);
-    if ($verified) {
+    $status = get_user_meta(get_current_user_id(), '_didit_status', true);
+    if ('Approved' === $status) {
       return '<div class="didit-gate didit-gate-unlocked">' . do_shortcode($content) . '</div>';
+    }
+
+    if ($status && 'Approved' !== $status && 'Declined' !== $status) {
+      return sprintf(
+        '<div class="didit-gate didit-gate-locked"><p style="color:#F59E0B;">%s</p></div>',
+        esc_html__('Your identity verification is being reviewed. Please check back shortly.', 'didit-verify')
+      );
     }
 
     return sprintf(
@@ -1222,13 +1246,23 @@ final class Didit_Verify
     if ('didit_verified' !== $column_name) {
       return $output;
     }
-    $verified = get_user_meta($user_id, '_didit_verified', true);
-    if ($verified) {
-      $date = get_user_meta($user_id, '_didit_verified_at', true);
+    $status = get_user_meta($user_id, '_didit_status', true);
+    $date = get_user_meta($user_id, '_didit_verified_at', true);
+
+    if ('Approved' === $status) {
       /* translators: %s: date when user was verified */
-      $title = $date ? sprintf(__('Verified on %s', 'didit-verify'), $date) : __('Verified', 'didit-verify');
-      return '<span style="color:#10b981;font-size:1.2em;" title="' . esc_attr($title) . '">&#10004;</span>';
+      $title = $date ? sprintf(__('Verified on %s', 'didit-verify'), $date) : __('Approved', 'didit-verify');
+      return '<span style="color:#41D97F;font-size:1.2em;" title="' . esc_attr($title) . '">&#10004;</span>';
     }
+    if ('Declined' === $status) {
+      $title = $date ? sprintf(__('Declined on %s', 'didit-verify'), $date) : __('Declined', 'didit-verify');
+      return '<span style="color:#FF4141;font-size:1.2em;" title="' . esc_attr($title) . '">&#10008;</span>';
+    }
+    if ($status) {
+      $title = $date ? sprintf(__('In review since %s', 'didit-verify'), $date) : __('In Review', 'didit-verify');
+      return '<span style="color:#F59E0B;font-size:1.2em;" title="' . esc_attr($title) . '">&#9202;</span>';
+    }
+
     return '<span style="color:#9ca3af;" title="' . esc_attr__('Not verified', 'didit-verify') . '">&#8212;</span>';
   }
 
