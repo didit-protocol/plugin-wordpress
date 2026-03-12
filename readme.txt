@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.1.2
+Stable tag: 0.1.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -179,6 +179,11 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 == Changelog ==
 
+= 0.1.4 =
+* Match verification status handling like in woocommerce: only grant access for Approved status.
+* Differentiate Approved, Declined, and In Review states in button, content gate, status shortcode, and admin users list.
+* Use Didit design system colors for status indicators.
+
 = 0.1.3 =
 * Update Didit Web SDK to version 0.1.8.
 * Improved support for Woocommerce block based checkout on new versions.
@@ -212,6 +217,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.1.4 =
+Match verification status handling between woocommerce and wordpress
 
 = 0.1.3 =
 SDK updated to 0.1.8. Improved support for Woocommerce block based checkout on new versions.
