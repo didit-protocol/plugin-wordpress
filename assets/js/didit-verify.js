@@ -43,6 +43,16 @@
     }
 
     if (cfg.restUrl && cfg.nonce) {
+      var verifyBody = {
+        type: result.type,
+        sessionId: result.session ? result.session.sessionId : "",
+        status: result.session ? result.session.status : ""
+      };
+      var orderBtn = document.querySelector(".didit-verify-btn[data-order-id]");
+      if (orderBtn) {
+        verifyBody.order_id = orderBtn.dataset.orderId;
+        verifyBody.order_key = orderBtn.dataset.orderKey || "";
+      }
       fetch(cfg.restUrl.replace("/session", "/verify"), {
         method: "POST",
         credentials: "same-origin",
@@ -50,11 +60,7 @@
           "Content-Type": "application/json",
           "X-WP-Nonce": cfg.nonce
         },
-        body: JSON.stringify({
-          type: result.type,
-          sessionId: result.session ? result.session.sessionId : "",
-          status: result.session ? result.session.status : ""
-        })
+        body: JSON.stringify(verifyBody)
       }).catch(function () {});
     }
 
@@ -135,6 +141,10 @@
       var requestBody = {};
       if (btn.dataset.wc && cfg.sendBilling) {
         requestBody = getWcBillingData();
+      }
+      if (btn.dataset.orderId) {
+        requestBody.order_id = btn.dataset.orderId;
+        requestBody.order_key = btn.dataset.orderKey || "";
       }
 
       fetch(cfg.restUrl, {

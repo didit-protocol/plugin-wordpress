@@ -139,18 +139,45 @@ Unverified users see a message and a verification button. You can customize the 
 
 ### 8. WooCommerce (optional)
 
-1. Check **Require identity verification at checkout** in settings
-2. Choose a **Position** for the verification section:
+Choose a **Verification Mode** in settings:
+
+| Mode | Behavior |
+|------|----------|
+| **Off** | No verification in WooCommerce |
+| **Require at checkout** | The order cannot be placed until the customer verifies (blocks "Place Order") |
+| **After purchase** | Low-barrier checkout — the customer verifies on the order confirmation page |
+
+#### Require at checkout
+
+1. Choose a **Position** for the verification section:
    - Top of checkout page
    - After billing details
    - After order notes
    - Before "Place Order" (recommended)
-3. Check **Send Billing Data** (enabled by default) — automatically sends the customer's billing info to Didit:
+2. Check **Send Billing Data** (enabled by default) — automatically sends the customer's billing info to Didit:
    - **contact_details**: email, phone
    - **expected_details**: first_name, last_name, country, full address
    - Country codes are automatically converted from WooCommerce alpha-2 to Didit's alpha-3 format
 
-The session ID is saved to order meta (`_didit_session_id`) and visible in the admin order screen.
+#### After purchase
+
+The verification box appears on the **order confirmation page** (classic and block themes), the **My Account → order view**, and a verification link is added to **customer order emails**. Works for **guest customers** too — the order key authenticates the request, no login needed.
+
+- Sessions are created server-side from the order's billing data and **reused** across clicks/reloads (no duplicate sessions, no wasted rate limit).
+- **Hold Orders** (optional): orders stay **On hold** until the Didit webhook confirms approval, then move to **Processing** automatically. Requires the Webhook Secret to be configured — the browser alone never releases a held order.
+- **Reminders** (optional): email customers who haven't verified, every N days, capped at a maximum per order. Scheduled with Action Scheduler (ships with WooCommerce). Reminders stop on approval/decline or when the order is cancelled/refunded.
+
+#### Webhooks (recommended)
+
+Configure a webhook destination in the [Didit Business Console](https://business.didit.me) (API & Webhooks) pointing to:
+
+```
+https://your-store.com/wp-json/didit/v1/webhook
+```
+
+Paste the destination's secret into **Settings → Didit Verify → Webhook Secret**. The receiver validates the `X-Signature` (HMAC-SHA256 over the raw body) and `X-Timestamp` (5-minute freshness) headers, is idempotent on duplicate deliveries, and updates **all** orders sharing the session as well as the customer's user meta. This is the authoritative completion channel — it works even if the customer closes the browser mid-flow.
+
+In both modes the session ID is saved to order meta (`_didit_session_id`) and shown with its verification status in the admin order screen.
 
 ### Vendor Data (user identifier)
 
@@ -288,7 +315,7 @@ The `expected_details` (name, country, address) are sent from the checkout form.
 
 ```php
 add_filter( 'didit_sdk_url', function () {
-    return 'https://unpkg.com/@didit-protocol/sdk-web@0.1.6/dist/didit-sdk.umd.min.js';
+    return 'https://unpkg.com/@didit-protocol/sdk-web@0.2.1/dist/didit-sdk.umd.min.js';
 } );
 ```
 
@@ -361,8 +388,9 @@ document.addEventListener('didit:complete', function (e) {
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| `POST` | `/wp-json/didit/v1/session` | Create a verification session | CSRF nonce + optional login |
-| `POST` | `/wp-json/didit/v1/verify` | Save verification result to user meta | Login required |
+| `POST` | `/wp-json/didit/v1/session` | Create a verification session | CSRF nonce + login, or order key (after-purchase) |
+| `POST` | `/wp-json/didit/v1/verify` | Save verification result to user/order meta | Login, or order key (after-purchase) |
+| `POST` | `/wp-json/didit/v1/webhook` | Didit webhook receiver (`status.updated`) | HMAC-SHA256 signature + timestamp |
 
 ## Uninstall
 

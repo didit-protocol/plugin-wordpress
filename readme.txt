@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.1.4
+Stable tag: 0.2.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -62,7 +62,7 @@ Didit Verify lets you require identity verification on your WordPress site. Drop
 
 This plugin connects to the [Didit](https://didit.me) identity verification service to process user verifications. When a verification session is created (API mode), the plugin sends data to Didit's servers. When the verification UI is displayed, an iframe loads content from `verify.didit.me`.
 
-This plugin bundles the [Didit Web SDK](https://www.npmjs.com/package/@didit-protocol/sdk-web) (version 0.1.6) as `assets/js/didit-sdk.umd.min.js`. The full unminified source code is publicly available at the GitHub repository and npm package linked below.
+This plugin bundles the [Didit Web SDK](https://www.npmjs.com/package/@didit-protocol/sdk-web) (version 0.2.1) as `assets/js/didit-sdk.umd.min.js`. The full unminified source code is publicly available at the GitHub repository and npm package linked below.
 
 * Service: [https://didit.me](https://didit.me)
 * SDK source code: [https://github.com/didit-protocol/sdk-web](https://github.com/didit-protocol/sdk-web)
@@ -178,6 +178,16 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 4. WooCommerce checkout with verification step.
 
 == Changelog ==
+
+= 0.2.0 =
+* New WooCommerce verification mode: "After purchase" — keep checkout low-barrier and ask for verification on the order confirmation page, My Account order view, and order emails (GitHub issue #1).
+* Guest customers can now verify after purchase: the order key authenticates the session and result endpoints, no login required.
+* Webhook receiver (didit/v1/webhook) with HMAC-SHA256 signature and timestamp validation — verification results update orders even if the customer closes the browser.
+* Optional "Hold orders" setting: orders stay On hold until the Didit webhook confirms approval, then move to Processing automatically.
+* Optional reminder emails (configurable interval and cap) for customers who have not completed verification, scheduled via Action Scheduler.
+* After-purchase sessions are created server-side from order billing data and reused across clicks/reloads to avoid duplicates.
+* Verification status is now shown next to the session id in the admin order screen.
+* Update Didit Web SDK to version 0.2.1.
 
 = 0.1.4 =
 * Match verification status handling like in woocommerce: only grant access for Approved status.

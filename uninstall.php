@@ -20,8 +20,14 @@ $didit_verify_options = [
 	'didit_close_on_complete',
 	'didit_logging',
 	'didit_wc_required',
+	'didit_wc_mode',
 	'didit_wc_position',
 	'didit_wc_send_billing',
+	'didit_wc_hold',
+	'didit_wc_reminders',
+	'didit_wc_reminder_interval',
+	'didit_wc_reminder_max',
+	'didit_webhook_secret',
 	'didit_btn_text',
 	'didit_btn_success_text',
 	'didit_btn_bg_color',
@@ -35,4 +41,8 @@ $didit_verify_options = [
 
 foreach ( $didit_verify_options as $didit_verify_option ) {
 	delete_option( $didit_verify_option );
+}
+
+if ( function_exists( 'as_unschedule_all_actions' ) ) {
+	as_unschedule_all_actions( 'didit_wc_verification_reminder' );
 }

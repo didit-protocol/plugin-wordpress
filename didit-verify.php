@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.1.4
+ * Version:     0.2.0
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.1.4');
+define('DIDIT_VERIFY_VERSION', '0.2.0');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -84,8 +84,14 @@ final class Didit_Verify
       'didit_close_on_complete' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
       'didit_logging' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
       'didit_wc_required' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_wc_mode' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
       'didit_wc_position' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'before_submit'],
       'didit_wc_send_billing' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => true],
+      'didit_wc_hold' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_wc_reminders' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_wc_reminder_interval' => ['sanitize_callback' => 'absint', 'default' => 3],
+      'didit_wc_reminder_max' => ['sanitize_callback' => 'absint', 'default' => 3],
+      'didit_webhook_secret' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
       'didit_btn_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'Verify your Identity'],
       'didit_btn_success_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'Identity Verified ✓'],
       'didit_btn_bg_color' => ['sanitize_callback' => 'sanitize_hex_color', 'default' => '#2667ff'],
@@ -130,11 +136,14 @@ final class Didit_Verify
 
     add_settings_section('didit_security', __('Security', 'didit-verify'), '__return_false', 'didit-verify');
     add_settings_field('didit_require_login', __('Require Login', 'didit-verify'), [$this, 'field_require_login'], 'didit-verify', 'didit_security');
+    add_settings_field('didit_webhook_secret', __('Webhook Secret', 'didit-verify'), [$this, 'field_webhook_secret'], 'didit-verify', 'didit_security');
 
     add_settings_section('didit_woocommerce', __('WooCommerce', 'didit-verify'), '__return_false', 'didit-verify');
-    add_settings_field('didit_wc_required', __('Checkout', 'didit-verify'), [$this, 'field_wc'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_mode', __('Verification Mode', 'didit-verify'), [$this, 'field_wc_mode'], 'didit-verify', 'didit_woocommerce');
     add_settings_field('didit_wc_position', __('Position', 'didit-verify'), [$this, 'field_wc_position'], 'didit-verify', 'didit_woocommerce');
     add_settings_field('didit_wc_send_billing', __('Send Billing Data', 'didit-verify'), [$this, 'field_wc_send_billing'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_hold', __('Hold Orders', 'didit-verify'), [$this, 'field_wc_hold'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_reminders', __('Reminders', 'didit-verify'), [$this, 'field_wc_reminders'], 'didit-verify', 'didit_woocommerce');
   }
 
   public function admin_enqueue_scripts($hook)
@@ -502,16 +511,75 @@ final class Didit_Verify
     );
   }
 
-  public function field_wc()
+  public function field_wc_mode()
+  {
+    if (!class_exists('WooCommerce')) {
+      echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
+      return;
+    }
+    $v = $this->wc_mode();
+    printf(
+      '<select name="didit_wc_mode">
+        <option value="off" %s>%s</option>
+        <option value="checkout" %s>%s</option>
+        <option value="after_purchase" %s>%s</option>
+      </select>
+      <p class="description">%s</p>',
+      selected($v, 'off', false),
+      esc_html__('Off — no verification in WooCommerce', 'didit-verify'),
+      selected($v, 'checkout', false),
+      esc_html__('Require at checkout — order cannot be placed until verified', 'didit-verify'),
+      selected($v, 'after_purchase', false),
+      esc_html__('After purchase — low-barrier checkout, verify on the order confirmation page', 'didit-verify'),
+      esc_html__('After-purchase mode shows the verification box on the order confirmation page, My Account order view, and order emails.', 'didit-verify')
+    );
+  }
+
+  public function field_wc_hold()
   {
     if (!class_exists('WooCommerce')) {
       echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
       return;
     }
     printf(
-      '<label><input type="checkbox" name="didit_wc_required" value="1" %s /> %s</label>',
-      checked(get_option('didit_wc_required', false), true, false),
-      esc_html__('Require identity verification at checkout', 'didit-verify')
+      '<label><input type="checkbox" name="didit_wc_hold" value="1" %s /> %s</label>
+			<p class="description">%s</p>',
+      checked(get_option('didit_wc_hold', false), true, false),
+      esc_html__('Hold orders (status "On hold") until identity verification is approved', 'didit-verify'),
+      esc_html__('After-purchase mode only. Orders are released to "Processing" automatically when the Didit webhook reports approval — configure the Webhook Secret below for this to work.', 'didit-verify')
+    );
+  }
+
+  public function field_wc_reminders()
+  {
+    if (!class_exists('WooCommerce')) {
+      echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
+      return;
+    }
+    printf(
+      '<label><input type="checkbox" name="didit_wc_reminders" value="1" %s /> %s</label>
+			<p style="margin-top:0.5rem;">%s <input type="number" name="didit_wc_reminder_interval" value="%s" min="1" max="60" style="width:70px;" /> %s
+			<input type="number" name="didit_wc_reminder_max" value="%s" min="1" max="20" style="width:70px;" /> %s</p>
+			<p class="description">%s</p>',
+      checked(get_option('didit_wc_reminders', false), true, false),
+      esc_html__('Email customers who have not completed verification', 'didit-verify'),
+      esc_html__('Every', 'didit-verify'),
+      esc_attr(max(1, (int) get_option('didit_wc_reminder_interval', 3))),
+      esc_html__('day(s), at most', 'didit-verify'),
+      esc_attr(max(1, (int) get_option('didit_wc_reminder_max', 3))),
+      esc_html__('reminder(s) per order.', 'didit-verify'),
+      esc_html__('After-purchase mode only. Reminders stop as soon as the verification is approved or declined, or the order is cancelled.', 'didit-verify')
+    );
+  }
+
+  public function field_webhook_secret()
+  {
+    printf(
+      '<input type="password" name="didit_webhook_secret" value="%s" class="regular-text" autocomplete="off" />
+			<p class="description">%s<br /><code>%s</code></p>',
+      esc_attr(get_option('didit_webhook_secret', '')),
+      esc_html__('Webhook secret from the Didit Business Console (API & Webhooks). Point the webhook destination to:', 'didit-verify'),
+      esc_url(rest_url('didit/v1/webhook'))
     );
   }
 
@@ -606,9 +674,15 @@ final class Didit_Verify
     register_rest_route('didit/v1', '/verify', [
       'methods' => 'POST',
       'callback' => [$this, 'rest_save_verification'],
-      'permission_callback' => function () {
-        return is_user_logged_in();
+      'permission_callback' => function ($request) {
+        return is_user_logged_in() || (bool) $this->validate_order_context($request->get_json_params());
       },
+    ]);
+
+    register_rest_route('didit/v1', '/webhook', [
+      'methods' => 'POST',
+      'callback' => [$this, 'rest_webhook'],
+      'permission_callback' => '__return_true',
     ]);
   }
 
@@ -619,11 +693,32 @@ final class Didit_Verify
       return new WP_Error('rest_forbidden', __('Invalid security token.', 'didit-verify'), ['status' => 403]);
     }
 
+    if ($this->validate_order_context($request->get_json_params())) {
+      return true;
+    }
+
     if (get_option('didit_require_login', true) && !is_user_logged_in()) {
       return new WP_Error('rest_forbidden', __('You must be logged in to start verification.', 'didit-verify'), ['status' => 401]);
     }
 
     return true;
+  }
+
+  private function validate_order_context($input)
+  {
+    if (!is_array($input) || !class_exists('WooCommerce') || 'after_purchase' !== $this->wc_mode()) {
+      return null;
+    }
+    $order_id = absint($input['order_id'] ?? 0);
+    $order_key = sanitize_text_field($input['order_key'] ?? '');
+    if (!$order_id || !$order_key) {
+      return null;
+    }
+    $order = wc_get_order($order_id);
+    if (!$order || !hash_equals($order->get_order_key(), $order_key)) {
+      return null;
+    }
+    return $order;
   }
 
   public function rest_create_session($request)
@@ -663,12 +758,51 @@ final class Didit_Verify
 
     $input = $request->get_json_params();
 
+    $order = $this->validate_order_context($input);
+    if ($order) {
+      $existing_url = $order->get_meta('_didit_session_url');
+      $existing_status = $order->get_meta('_didit_status');
+      if ($existing_url && !in_array($existing_status, ['Approved', 'Declined', 'Expired', 'KYC Expired'], true)) {
+        return rest_ensure_response(['url' => $existing_url]);
+      }
+    }
+
     if (!empty($input['contact_details']) && is_array($input['contact_details'])) {
       $body['contact_details'] = $this->sanitize_contact_details($input['contact_details']);
     }
 
     if (!empty($input['expected_details']) && is_array($input['expected_details'])) {
       $body['expected_details'] = $this->sanitize_expected_details($input['expected_details']);
+    }
+
+    if ($order && get_option('didit_wc_send_billing', true)) {
+      $contact = array_filter([
+        'email' => sanitize_email($order->get_billing_email()),
+        'phone' => sanitize_text_field($order->get_billing_phone()),
+      ]);
+      $address = implode(', ', array_filter([
+        $order->get_billing_address_1(),
+        $order->get_billing_address_2(),
+        $order->get_billing_city(),
+        $order->get_billing_state(),
+        $order->get_billing_postcode(),
+      ]));
+      $expected = array_filter([
+        'first_name' => sanitize_text_field($order->get_billing_first_name()),
+        'last_name' => sanitize_text_field($order->get_billing_last_name()),
+        'country' => sanitize_text_field($order->get_billing_country()),
+        'address' => sanitize_text_field($address),
+      ]);
+      if ($contact) {
+        $body['contact_details'] = $this->sanitize_contact_details($contact);
+      }
+      if ($expected) {
+        $body['expected_details'] = $this->sanitize_expected_details($expected);
+      }
+    }
+
+    if ($order && !is_user_logged_in()) {
+      $body['vendor_data'] = 'order-' . $order->get_id();
     }
 
     if (!empty($input['portrait_image']) && is_string($input['portrait_image'])) {
@@ -682,6 +816,9 @@ final class Didit_Verify
       $user = wp_get_current_user();
       $meta['wp_user_id'] = $user->ID;
       $meta['wp_email'] = $user->user_email;
+    }
+    if ($order) {
+      $meta['wc_order_id'] = $order->get_id();
     }
     $meta['wp_ip'] = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'] ?? ''));
 
@@ -726,6 +863,20 @@ final class Didit_Verify
       return new WP_Error('api_error', __('No verification URL returned.', 'didit-verify'), ['status' => 500]);
     }
 
+    if ($order) {
+      $order->update_meta_data('_didit_session_id', sanitize_text_field($data['session_id'] ?? ''));
+      $order->update_meta_data('_didit_session_url', esc_url_raw($url));
+      if (!$order->get_meta('_didit_status')) {
+        $order->update_meta_data('_didit_status', 'Not Started');
+      }
+      $order->add_order_note(sprintf(
+        /* translators: %s: Didit session id. */
+        __('Didit: verification session created (%s).', 'didit-verify'),
+        sanitize_text_field($data['session_id'] ?? '')
+      ));
+      $order->save();
+    }
+
     do_action('didit_session_created', $url, get_current_user_id() ?: null, $vendor_data);
 
     return rest_ensure_response(['url' => $url]);
@@ -734,24 +885,32 @@ final class Didit_Verify
   public function rest_save_verification($request)
   {
     $user_id = get_current_user_id();
-    if (!$user_id) {
+    $input = $request->get_json_params();
+    $order = $this->validate_order_context($input);
+
+    if (!$user_id && !$order) {
       return new WP_Error('not_logged_in', 'User not logged in.', ['status' => 401]);
     }
 
-    $input = $request->get_json_params();
     $type = sanitize_text_field($input['type'] ?? '');
     $session_id = sanitize_text_field($input['sessionId'] ?? '');
     $status = sanitize_text_field($input['status'] ?? '');
 
     if ('completed' === $type) {
-      update_user_meta($user_id, '_didit_session_id', $session_id);
-      update_user_meta($user_id, '_didit_status', $status);
-      update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
+      if ($user_id) {
+        update_user_meta($user_id, '_didit_session_id', $session_id);
+        update_user_meta($user_id, '_didit_status', $status);
+        update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
 
-      if ('Approved' === $status) {
-        update_user_meta($user_id, '_didit_verified', 1);
-      } else {
-        delete_user_meta($user_id, '_didit_verified');
+        if ('Approved' === $status) {
+          update_user_meta($user_id, '_didit_verified', 1);
+        } else {
+          delete_user_meta($user_id, '_didit_verified');
+        }
+      }
+
+      if ($order && $session_id && hash_equals((string) $order->get_meta('_didit_session_id'), $session_id)) {
+        $this->wc_apply_verification_to_order($order, $status, 'browser');
       }
 
       do_action('didit_verification_completed', $user_id, $session_id, $status);
@@ -760,6 +919,74 @@ final class Didit_Verify
     }
 
     return rest_ensure_response(['saved' => true]);
+  }
+
+  public function rest_webhook($request)
+  {
+    $secret = get_option('didit_webhook_secret', '');
+    if (!$secret) {
+      return new WP_Error('not_configured', __('Webhook secret is not configured.', 'didit-verify'), ['status' => 501]);
+    }
+
+    $raw = $request->get_body();
+    $signature = $request->get_header('x_signature');
+    $timestamp = (int) $request->get_header('x_timestamp');
+
+    if (!$signature || !$timestamp || abs(time() - $timestamp) > 5 * MINUTE_IN_SECONDS) {
+      return new WP_Error('invalid_request', __('Missing or stale webhook signature.', 'didit-verify'), ['status' => 401]);
+    }
+
+    $expected = hash_hmac('sha256', $raw, $secret);
+    if (!hash_equals($expected, $signature)) {
+      return new WP_Error('invalid_signature', __('Webhook signature mismatch.', 'didit-verify'), ['status' => 401]);
+    }
+
+    $payload = json_decode($raw, true);
+    if (!is_array($payload)) {
+      return new WP_Error('invalid_payload', __('Invalid webhook payload.', 'didit-verify'), ['status' => 400]);
+    }
+
+    if ('status.updated' !== ($payload['webhook_type'] ?? '')) {
+      return rest_ensure_response(['received' => true, 'ignored' => true]);
+    }
+
+    $session_id = sanitize_text_field($payload['session_id'] ?? '');
+    $status = sanitize_text_field($payload['status'] ?? '');
+    if (!$session_id || !$status) {
+      return new WP_Error('invalid_payload', __('Invalid webhook payload.', 'didit-verify'), ['status' => 400]);
+    }
+
+    if (class_exists('WooCommerce')) {
+      $orders = wc_get_orders([
+        'limit' => -1,
+        'meta_query' => [['key' => '_didit_session_id', 'value' => $session_id]],
+      ]);
+      foreach ($orders as $wc_order) {
+        $this->wc_apply_verification_to_order($wc_order, $status, 'webhook');
+      }
+    }
+
+    $meta = is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [];
+    $wp_user_id = absint($meta['wp_user_id'] ?? 0);
+    if (!$wp_user_id && preg_match('/^wp-(\d+)$/', (string) ($payload['vendor_data'] ?? ''), $m)) {
+      $wp_user_id = absint($m[1]);
+    }
+    if ($wp_user_id && get_userdata($wp_user_id)) {
+      update_user_meta($wp_user_id, '_didit_session_id', $session_id);
+      update_user_meta($wp_user_id, '_didit_status', $status);
+      update_user_meta($wp_user_id, '_didit_verified_at', current_time('mysql'));
+      if ('Approved' === $status) {
+        update_user_meta($wp_user_id, '_didit_verified', 1);
+      } else {
+        delete_user_meta($wp_user_id, '_didit_verified');
+      }
+    }
+
+    if (in_array($status, ['Approved', 'Declined'], true)) {
+      do_action('didit_verification_completed', $wp_user_id, $session_id, $status);
+    }
+
+    return rest_ensure_response(['received' => true]);
   }
 
   private function check_rate_limit()
@@ -1049,6 +1276,47 @@ final class Didit_Verify
     return $map[$alpha2] ?? '';
   }
 
+  private function wc_mode(): string
+  {
+    $mode = get_option('didit_wc_mode', '');
+    if ('' === $mode) {
+      return get_option('didit_wc_required', false) ? 'checkout' : 'off';
+    }
+    return in_array($mode, ['checkout', 'after_purchase'], true) ? $mode : 'off';
+  }
+
+  private function wc_apply_verification_to_order($order, string $status, string $source): bool
+  {
+    $changed = (string) $order->get_meta('_didit_status') !== $status;
+
+    if ($changed) {
+      $order->update_meta_data('_didit_status', $status);
+      $order->add_order_note(sprintf(
+        /* translators: 1: verification status, 2: source (browser/webhook). */
+        __('Didit: verification status "%1$s" (via %2$s).', 'didit-verify'),
+        $status,
+        $source
+      ));
+    }
+
+    if ('Approved' === $status && 'webhook' === $source && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
+      $order->delete_meta_data('_didit_held');
+      $order->save();
+      $order->update_status('processing', __('Didit: identity verified — order released.', 'didit-verify'));
+    } elseif ($changed) {
+      $order->save();
+    }
+
+    return $changed;
+  }
+
+  private function wc_order_verification_url($order): string
+  {
+    return $order->get_customer_id()
+      ? $order->get_view_order_url()
+      : $order->get_checkout_order_received_url();
+  }
+
   private function resolve_vendor_data(): string
   {
     $mode = get_option('didit_vendor_data_mode', 'user_id');
@@ -1124,7 +1392,13 @@ final class Didit_Verify
 
   private function page_needs_sdk()
   {
-    if (function_exists('is_checkout') && is_checkout() && get_option('didit_wc_required', false)) {
+    if (function_exists('is_checkout') && is_checkout() && 'checkout' === $this->wc_mode()) {
+      return true;
+    }
+    if (
+      'after_purchase' === $this->wc_mode() && function_exists('is_order_received_page')
+      && (is_order_received_page() || is_wc_endpoint_url('view-order'))
+    ) {
       return true;
     }
     global $post;
@@ -1268,29 +1542,43 @@ final class Didit_Verify
 
   public function wc_hooks()
   {
-    $hooks = [
-      'before_checkout' => 'woocommerce_before_checkout_form',
-      'after_billing' => 'woocommerce_after_checkout_billing_form',
-      'after_order_notes' => 'woocommerce_after_order_notes',
-      'before_submit' => 'woocommerce_review_order_before_submit',
-    ];
-    $position = get_option('didit_wc_position', 'before_submit');
-    $hook = $hooks[$position] ?? $hooks['before_submit'];
-
-    add_action($hook, [$this, 'wc_checkout_field']);
-    add_action('woocommerce_checkout_process', [$this, 'wc_validate_checkout']);
-    add_action('woocommerce_checkout_update_order_meta', [$this, 'wc_save_order_meta']);
     add_action('woocommerce_admin_order_data_after_billing_address', [$this, 'wc_show_order_meta']);
+    add_action('didit_wc_verification_reminder', [$this, 'wc_send_verification_reminder']);
 
-    // Block-based checkout support (WooCommerce 8.3+).
-    add_filter('render_block_woocommerce/checkout-actions-block', [$this, 'wc_block_checkout_field']);
-    add_filter('rest_authentication_errors', [$this, 'wc_block_validate_checkout']);
-    add_action('woocommerce_store_api_checkout_order_processed', [$this, 'wc_block_save_order_meta']);
+    if ('checkout' === $this->wc_mode()) {
+      $hooks = [
+        'before_checkout' => 'woocommerce_before_checkout_form',
+        'after_billing' => 'woocommerce_after_checkout_billing_form',
+        'after_order_notes' => 'woocommerce_after_order_notes',
+        'before_submit' => 'woocommerce_review_order_before_submit',
+      ];
+      $position = get_option('didit_wc_position', 'before_submit');
+      $hook = $hooks[$position] ?? $hooks['before_submit'];
+
+      add_action($hook, [$this, 'wc_checkout_field']);
+      add_action('woocommerce_checkout_process', [$this, 'wc_validate_checkout']);
+      add_action('woocommerce_checkout_update_order_meta', [$this, 'wc_save_order_meta']);
+
+      add_filter('render_block_woocommerce/checkout-actions-block', [$this, 'wc_block_checkout_field']);
+      add_filter('rest_authentication_errors', [$this, 'wc_block_validate_checkout']);
+      add_action('woocommerce_store_api_checkout_order_processed', [$this, 'wc_block_save_order_meta']);
+    }
+
+    if ('after_purchase' === $this->wc_mode()) {
+      add_action('woocommerce_thankyou', [$this, 'wc_post_purchase_box_echo'], 9);
+      add_filter('render_block_woocommerce/order-confirmation-status', [$this, 'wc_block_confirmation_box'], 10, 1);
+      add_action('woocommerce_view_order', [$this, 'wc_post_purchase_box_echo'], 5);
+
+      add_action('woocommerce_checkout_order_processed', [$this, 'wc_mark_order_pending_verification'], 10, 1);
+      add_action('woocommerce_store_api_checkout_order_processed', [$this, 'wc_mark_order_pending_verification'], 10, 1);
+      add_action('woocommerce_order_status_changed', [$this, 'wc_maybe_hold_order'], 20, 4);
+      add_action('woocommerce_email_order_details', [$this, 'wc_email_verification_link'], 5, 4);
+    }
   }
 
   public function wc_checkout_field()
   {
-    if (!get_option('didit_wc_required', false)) {
+    if ('checkout' !== $this->wc_mode()) {
       return;
     }
     ?>
@@ -1320,7 +1608,7 @@ final class Didit_Verify
 
   public function wc_validate_checkout()
   {
-    if (!get_option('didit_wc_required', false)) {
+    if ('checkout' !== $this->wc_mode()) {
       return;
     }
     // phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -1357,11 +1645,228 @@ final class Didit_Verify
   {
     $session_id = $order->get_meta('_didit_session_id');
     if ($session_id) {
+      $status = (string) $order->get_meta('_didit_status');
       printf(
-        '<p><strong>%s</strong> %s</p>',
+        '<p><strong>%s</strong> %s%s</p>',
         esc_html__('Didit Verification:', 'didit-verify'),
-        esc_html($session_id)
+        esc_html($session_id),
+        $status ? ' — ' . esc_html($status) : ''
       );
+    }
+  }
+
+
+  public function wc_post_purchase_box_echo($order_id)
+  {
+    $order = wc_get_order($order_id);
+    if ($order) {
+      echo $this->wc_render_post_purchase_box($order); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
+    }
+  }
+
+  public function wc_block_confirmation_box($block_content)
+  {
+    global $wp;
+    $order = wc_get_order(absint($wp->query_vars['order-received'] ?? 0));
+    if (!$order) {
+      return $block_content;
+    }
+    return $block_content . $this->wc_render_post_purchase_box($order);
+  }
+
+  private function customer_can_access_order($order): bool
+  {
+    $url_key = isset($_GET['key']) ? sanitize_text_field(wp_unslash($_GET['key'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- capability check, not a state change.
+    if ($url_key && hash_equals($order->get_order_key(), $url_key)) {
+      return true;
+    }
+    $customer_id = $order->get_customer_id();
+    return $customer_id && get_current_user_id() === $customer_id;
+  }
+
+  private function wc_render_post_purchase_box($order): string
+  {
+    static $rendered = false;
+    if (
+      $rendered
+      || !$this->customer_can_access_order($order)
+      || in_array($order->get_status(), ['cancelled', 'refunded', 'failed'], true)
+    ) {
+      return '';
+    }
+    $rendered = true;
+
+    $status = (string) $order->get_meta('_didit_status');
+
+    if ('Approved' === $status) {
+      return sprintf(
+        '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #41D97F; border-radius:6px;">
+          <h3 style="margin-top:0;">%s</h3>
+          <p style="color:#41D97F; font-weight:600; margin:0;">%s</p>
+        </div>',
+        esc_html__('Identity Verification', 'didit-verify'),
+        esc_html__('Your identity has been verified. Thank you!', 'didit-verify')
+      );
+    }
+
+    if ('In Review' === $status) {
+      return sprintf(
+        '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #F59E0B; border-radius:6px;">
+          <h3 style="margin-top:0;">%s</h3>
+          <p style="color:#F59E0B; font-weight:600; margin:0;">%s</p>
+        </div>',
+        esc_html__('Identity Verification', 'didit-verify'),
+        esc_html__('Your verification is being reviewed. No further action is needed.', 'didit-verify')
+      );
+    }
+
+    $intro = 'Declined' === $status
+      ? __('Your previous verification attempt was declined. Please try again.', 'didit-verify')
+      : __('Please verify your identity to complete your order.', 'didit-verify');
+
+    $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
+    $btn_text = get_option('didit_btn_text', 'Verify your Identity');
+    $btn_success = get_option('didit_btn_success_text', 'Identity Verified ✓');
+
+    return sprintf(
+      '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #ddd; border-radius:6px;">
+        <h3 style="margin-top:0;">%s</h3>
+        <p style="color:#666; font-size:0.9em;">%s</p>
+        <button type="button" class="didit-verify-btn" data-text="%s" data-success="%s" data-order-id="%d" data-order-key="%s"%s>%s</button>
+        %s
+      </div>',
+      esc_html__('Identity Verification', 'didit-verify'),
+      esc_html($intro),
+      esc_attr($btn_text),
+      esc_attr($btn_success),
+      absint($order->get_id()),
+      esc_attr($order->get_order_key()),
+      $is_embedded ? ' data-container="didit-wc-embed"' : '',
+      esc_html($btn_text),
+      $is_embedded ? '<div class="didit-embed-container" id="didit-wc-embed"></div>' : ''
+    );
+  }
+
+  public function wc_mark_order_pending_verification($order)
+  {
+    $order = $order instanceof WC_Order ? $order : wc_get_order($order);
+    if (!$order || 'after_purchase' !== $this->wc_mode() || $order->get_meta('_didit_requires_verification')) {
+      return;
+    }
+    $order->update_meta_data('_didit_requires_verification', 'yes');
+    $order->save();
+    $this->wc_schedule_reminder($order->get_id());
+  }
+
+  public function wc_maybe_hold_order($order_id, $from, $to, $order)
+  {
+    static $holding = false;
+    if (
+      $holding || 'processing' !== $to
+      || !get_option('didit_wc_hold', false) || 'after_purchase' !== $this->wc_mode()
+      || !$order->get_meta('_didit_requires_verification')
+      || 'Approved' === $order->get_meta('_didit_status')
+    ) {
+      return;
+    }
+    $holding = true;
+    $order->update_meta_data('_didit_held', 'yes');
+    $order->save();
+    $order->update_status('on-hold', __('Didit: order held until identity verification is approved.', 'didit-verify'));
+    $holding = false;
+  }
+
+  public function wc_email_verification_link($order, $sent_to_admin, $plain_text, $email)
+  {
+    if (
+      $sent_to_admin || 'after_purchase' !== $this->wc_mode()
+      || !$order->get_meta('_didit_requires_verification')
+      || in_array($order->get_meta('_didit_status'), ['Approved', 'In Review'], true)
+    ) {
+      return;
+    }
+
+    $url = $this->wc_order_verification_url($order);
+
+    if ($plain_text) {
+      printf(
+        "\n%s\n%s\n\n",
+        esc_html__('Please verify your identity to complete your order:', 'didit-verify'),
+        esc_url($url)
+      );
+      return;
+    }
+
+    printf(
+      '<p style="margin:16px 0;"><strong>%s</strong><br />%s <a href="%s">%s</a></p>',
+      esc_html__('Identity verification required', 'didit-verify'),
+      esc_html__('Please verify your identity to complete your order:', 'didit-verify'),
+      esc_url($url),
+      esc_html__('Verify your identity', 'didit-verify')
+    );
+  }
+
+  private function wc_schedule_reminder($order_id)
+  {
+    if (!get_option('didit_wc_reminders', false)) {
+      return;
+    }
+    $interval = max(1, (int) get_option('didit_wc_reminder_interval', 3));
+    $timestamp = time() + $interval * DAY_IN_SECONDS;
+
+    if (function_exists('as_schedule_single_action')) {
+      as_schedule_single_action($timestamp, 'didit_wc_verification_reminder', [$order_id], 'didit-verify');
+    } else {
+      wp_schedule_single_event($timestamp, 'didit_wc_verification_reminder', [$order_id]);
+    }
+  }
+
+  public function wc_send_verification_reminder($order_id)
+  {
+    $order = wc_get_order($order_id);
+    if (
+      !$order || 'after_purchase' !== $this->wc_mode() || !get_option('didit_wc_reminders', false)
+      || !$order->get_meta('_didit_requires_verification')
+      || in_array($order->get_meta('_didit_status'), ['Approved', 'Declined', 'In Review'], true)
+      || in_array($order->get_status(), ['cancelled', 'refunded', 'failed'], true)
+    ) {
+      return;
+    }
+
+    $count = (int) $order->get_meta('_didit_reminder_count');
+    $max = max(1, (int) get_option('didit_wc_reminder_max', 3));
+    $to = $order->get_billing_email();
+    if ($count >= $max || !$to) {
+      return;
+    }
+
+    $subject = sprintf(
+      /* translators: %s: order number. */
+      __('Action required: verify your identity for order #%s', 'didit-verify'),
+      $order->get_order_number()
+    );
+    $body = sprintf(
+      '<p>%s</p><p><a href="%s">%s</a></p>',
+      esc_html__('Your order is waiting for identity verification. It only takes a couple of minutes.', 'didit-verify'),
+      esc_url($this->wc_order_verification_url($order)),
+      esc_html__('Verify your identity now', 'didit-verify')
+    );
+
+    $mailer = WC()->mailer();
+    $mailer->send($to, $subject, $mailer->wrap_message($subject, $body));
+
+    $order->update_meta_data('_didit_reminder_count', $count + 1);
+    $order->add_order_note(sprintf(
+      /* translators: 1: reminder number, 2: max reminders, 3: recipient email. */
+      __('Didit: verification reminder %1$d of %2$d sent to %3$s.', 'didit-verify'),
+      $count + 1,
+      $max,
+      $to
+    ));
+    $order->save();
+
+    if ($count + 1 < $max) {
+      $this->wc_schedule_reminder($order_id);
     }
   }
 
@@ -1369,7 +1874,7 @@ final class Didit_Verify
 
   public function wc_block_checkout_field($block_content)
   {
-    if (!get_option('didit_wc_required', false)) {
+    if ('checkout' !== $this->wc_mode()) {
       return $block_content;
     }
 
@@ -1402,7 +1907,7 @@ final class Didit_Verify
 
   public function wc_block_validate_checkout($result)
   {
-    if (!get_option('didit_wc_required', false)) {
+    if ('checkout' !== $this->wc_mode()) {
       return $result;
     }
 
