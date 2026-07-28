@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.2.0
+ * Version:     0.3.0
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -11,13 +11,14 @@
  * Requires PHP: 7.4
  * WC requires at least: 7.0
  * Text Domain: didit-verify
+ * Domain Path: /languages
  */
 
 if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.2.0');
+define('DIDIT_VERIFY_VERSION', '0.3.0');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -37,6 +38,8 @@ final class Didit_Verify
 
   private function __construct()
   {
+    add_action('init', [$this, 'load_textdomain']);
+
     add_action('admin_menu', [$this, 'admin_menu']);
     add_action('admin_init', [$this, 'admin_register_settings']);
     add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
@@ -52,6 +55,11 @@ final class Didit_Verify
     add_shortcode('didit_gate', [$this, 'render_gate_shortcode']);
 
     add_action('woocommerce_loaded', [$this, 'wc_hooks']);
+  }
+
+  public function load_textdomain()
+  {
+    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages');
   }
 
   public function admin_menu()
@@ -85,15 +93,19 @@ final class Didit_Verify
       'didit_logging' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
       'didit_wc_required' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
       'didit_wc_mode' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+      'didit_wc_scope' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'all'],
       'didit_wc_position' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'before_submit'],
       'didit_wc_send_billing' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => true],
       'didit_wc_hold' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
       'didit_wc_reminders' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
       'didit_wc_reminder_interval' => ['sanitize_callback' => 'absint', 'default' => 3],
       'didit_wc_reminder_max' => ['sanitize_callback' => 'absint', 'default' => 3],
+      'didit_wc_title' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+      'didit_wc_checkout_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+      'didit_wc_post_purchase_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
       'didit_webhook_secret' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
-      'didit_btn_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'Verify your Identity'],
-      'didit_btn_success_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => 'Identity Verified ✓'],
+      'didit_btn_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+      'didit_btn_success_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
       'didit_btn_bg_color' => ['sanitize_callback' => 'sanitize_hex_color', 'default' => '#2667ff'],
       'didit_btn_text_color' => ['sanitize_callback' => 'sanitize_hex_color', 'default' => '#ffffff'],
       'didit_btn_border_radius' => ['sanitize_callback' => 'absint', 'default' => 8],
@@ -140,7 +152,11 @@ final class Didit_Verify
 
     add_settings_section('didit_woocommerce', __('WooCommerce', 'didit-verify'), '__return_false', 'didit-verify');
     add_settings_field('didit_wc_mode', __('Verification Mode', 'didit-verify'), [$this, 'field_wc_mode'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_scope', __('Product Scope', 'didit-verify'), [$this, 'field_wc_scope'], 'didit-verify', 'didit_woocommerce');
     add_settings_field('didit_wc_position', __('Position', 'didit-verify'), [$this, 'field_wc_position'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_title', __('Section Title', 'didit-verify'), [$this, 'field_wc_title'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_checkout_text', __('Checkout Message', 'didit-verify'), [$this, 'field_wc_checkout_text'], 'didit-verify', 'didit_woocommerce');
+    add_settings_field('didit_wc_post_purchase_text', __('Post-purchase Message', 'didit-verify'), [$this, 'field_wc_post_purchase_text'], 'didit-verify', 'didit_woocommerce');
     add_settings_field('didit_wc_send_billing', __('Send Billing Data', 'didit-verify'), [$this, 'field_wc_send_billing'], 'didit-verify', 'didit_woocommerce');
     add_settings_field('didit_wc_hold', __('Hold Orders', 'didit-verify'), [$this, 'field_wc_hold'], 'didit-verify', 'didit_woocommerce');
     add_settings_field('didit_wc_reminders', __('Reminders', 'didit-verify'), [$this, 'field_wc_reminders'], 'didit-verify', 'didit_woocommerce');
@@ -404,7 +420,7 @@ final class Didit_Verify
     $pv = (int) get_option('didit_btn_padding_v', 12);
     $ph = (int) get_option('didit_btn_padding_h', 24);
     $fs = (int) get_option('didit_btn_font_size', 16);
-    $text = get_option('didit_btn_text', 'Verify your Identity');
+    $text = $this->btn_text();
     ?>
     <div style="margin-bottom:1.5em;">
       <p class="description" style="margin-bottom:0.75em;">
@@ -431,20 +447,22 @@ final class Didit_Verify
   public function field_btn_text()
   {
     printf(
-      '<input type="text" name="didit_btn_text" value="%s" class="regular-text" />
+      '<input type="text" name="didit_btn_text" value="%s" class="regular-text" placeholder="%s" />
       <p class="description">%s</p>',
-      esc_attr(get_option('didit_btn_text', 'Verify your Identity')),
-      esc_html__('Label shown on the button before verification.', 'didit-verify')
+      esc_attr(get_option('didit_btn_text', '')),
+      esc_attr__('Verify your Identity', 'didit-verify'),
+      esc_html__('Label shown on the button before verification. Leave empty to use the default text, which follows the site language.', 'didit-verify')
     );
   }
 
   public function field_btn_success_text()
   {
     printf(
-      '<input type="text" name="didit_btn_success_text" value="%s" class="regular-text" />
+      '<input type="text" name="didit_btn_success_text" value="%s" class="regular-text" placeholder="%s" />
       <p class="description">%s</p>',
-      esc_attr(get_option('didit_btn_success_text', 'Identity Verified ✓')),
-      esc_html__('Label shown after successful verification.', 'didit-verify')
+      esc_attr(get_option('didit_btn_success_text', '')),
+      esc_attr__('Identity Verified ✓', 'didit-verify'),
+      esc_html__('Label shown after successful verification. Leave empty to use the default text, which follows the site language.', 'didit-verify')
     );
   }
 
@@ -535,6 +553,30 @@ final class Didit_Verify
     );
   }
 
+  public function field_wc_scope()
+  {
+    if (!class_exists('WooCommerce')) {
+      echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
+      return;
+    }
+    $v = $this->wc_scope();
+    printf(
+      '<select name="didit_wc_scope">
+        <option value="all" %s>%s</option>
+        <option value="include" %s>%s</option>
+        <option value="exclude" %s>%s</option>
+      </select>
+      <p class="description">%s</p>',
+      selected($v, 'all', false),
+      esc_html__('All products — verification applies to every order', 'didit-verify'),
+      selected($v, 'include', false),
+      esc_html__('Only selected products — require verification only when the cart contains a selected product', 'didit-verify'),
+      selected($v, 'exclude', false),
+      esc_html__('All products except selected — skip verification only when every product in the cart is selected', 'didit-verify'),
+      esc_html__('Select products on the product edit page: Product data → Advanced → "Didit verification". Mixed carts require verification whenever at least one product in the cart requires it.', 'didit-verify')
+    );
+  }
+
   public function field_wc_hold()
   {
     if (!class_exists('WooCommerce')) {
@@ -607,6 +649,82 @@ final class Didit_Verify
       selected($v, 'before_submit', false),
       esc_html__('Before "Place Order" (recommended) — last step before payment', 'didit-verify'),
       esc_html__('Where the verification section appears on the checkout page.', 'didit-verify')
+    );
+  }
+
+  private function text_option(string $option, string $default): string
+  {
+    $value = trim((string) get_option($option, ''));
+    return '' !== $value ? $value : $default;
+  }
+
+  private function btn_text(): string
+  {
+    return $this->text_option('didit_btn_text', __('Verify your Identity', 'didit-verify'));
+  }
+
+  private function btn_success_text(): string
+  {
+    return $this->text_option('didit_btn_success_text', __('Identity Verified ✓', 'didit-verify'));
+  }
+
+  private function wc_box_title(): string
+  {
+    return $this->text_option('didit_wc_title', __('Identity Verification', 'didit-verify'));
+  }
+
+  private function wc_checkout_text(): string
+  {
+    return $this->text_option('didit_wc_checkout_text', __('Please verify your identity before placing your order.', 'didit-verify'));
+  }
+
+  private function wc_post_purchase_text(): string
+  {
+    return $this->text_option('didit_wc_post_purchase_text', __('Please verify your identity to complete your order.', 'didit-verify'));
+  }
+
+  public function field_wc_title()
+  {
+    if (!class_exists('WooCommerce')) {
+      echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
+      return;
+    }
+    printf(
+      '<input type="text" name="didit_wc_title" value="%s" class="regular-text" placeholder="%s" />
+			<p class="description">%s</p>',
+      esc_attr(get_option('didit_wc_title', '')),
+      esc_attr__('Identity Verification', 'didit-verify'),
+      esc_html__('Heading of the verification section at checkout and after purchase. Leave empty to use the default text, which follows the site language.', 'didit-verify')
+    );
+  }
+
+  public function field_wc_checkout_text()
+  {
+    if (!class_exists('WooCommerce')) {
+      echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
+      return;
+    }
+    printf(
+      '<input type="text" name="didit_wc_checkout_text" value="%s" class="large-text" placeholder="%s" />
+			<p class="description">%s</p>',
+      esc_attr(get_option('didit_wc_checkout_text', '')),
+      esc_attr__('Please verify your identity before placing your order.', 'didit-verify'),
+      esc_html__('Message shown in the verification section on the checkout page. Leave empty to use the default text, which follows the site language.', 'didit-verify')
+    );
+  }
+
+  public function field_wc_post_purchase_text()
+  {
+    if (!class_exists('WooCommerce')) {
+      echo '<p class="description">' . esc_html__('WooCommerce is not active.', 'didit-verify') . '</p>';
+      return;
+    }
+    printf(
+      '<input type="text" name="didit_wc_post_purchase_text" value="%s" class="large-text" placeholder="%s" />
+			<p class="description">%s</p>',
+      esc_attr(get_option('didit_wc_post_purchase_text', '')),
+      esc_attr__('Please verify your identity to complete your order.', 'didit-verify'),
+      esc_html__('Message shown in the verification section after purchase (order confirmation page, My Account, emails). Leave empty to use the default text, which follows the site language.', 'didit-verify')
     );
   }
 
@@ -1285,6 +1403,67 @@ final class Didit_Verify
     return in_array($mode, ['checkout', 'after_purchase'], true) ? $mode : 'off';
   }
 
+  private function wc_scope(): string
+  {
+    $scope = get_option('didit_wc_scope', 'all');
+    return in_array($scope, ['include', 'exclude'], true) ? $scope : 'all';
+  }
+
+  private function wc_product_is_selected(int $product_id): bool
+  {
+    return $product_id && 'yes' === get_post_meta($product_id, '_didit_verify', true);
+  }
+
+  private function wc_items_require_verification(array $product_ids): bool
+  {
+    $scope = $this->wc_scope();
+    if ('all' === $scope) {
+      return true;
+    }
+    foreach ($product_ids as $product_id) {
+      $selected = $this->wc_product_is_selected(absint($product_id));
+      if ('include' === $scope ? $selected : !$selected) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private function wc_cart_requires_verification(): bool
+  {
+    if ('all' === $this->wc_scope()) {
+      return true;
+    }
+    if (!function_exists('WC')) {
+      return true;
+    }
+    if (null === WC()->cart && function_exists('wc_load_cart')) {
+      wc_load_cart();
+    }
+    if (null === WC()->cart) {
+      return true;
+    }
+    $product_ids = [];
+    foreach (WC()->cart->get_cart() as $item) {
+      $product_ids[] = absint($item['product_id'] ?? 0);
+    }
+    return $this->wc_items_require_verification($product_ids);
+  }
+
+  private function wc_order_requires_verification($order): bool
+  {
+    if ('all' === $this->wc_scope()) {
+      return true;
+    }
+    $product_ids = [];
+    foreach ($order->get_items() as $item) {
+      if (is_callable([$item, 'get_product_id'])) {
+        $product_ids[] = absint($item->get_product_id());
+      }
+    }
+    return $this->wc_items_require_verification($product_ids);
+  }
+
   private function wc_apply_verification_to_order($order, string $status, string $source): bool
   {
     $changed = (string) $order->get_meta('_didit_status') !== $status;
@@ -1371,6 +1550,12 @@ final class Didit_Verify
       'showExitConfirmation' => (bool) get_option('didit_exit_confirmation', true),
       'closeModalOnComplete' => (bool) get_option('didit_close_on_complete', false),
       'loggingEnabled' => (bool) get_option('didit_logging', false),
+      'i18n' => [
+        'creatingSession' => __('Creating session…', 'didit-verify'),
+        'inReview' => __('Verification In Review', 'didit-verify'),
+        'verificationError' => __('Verification error:', 'didit-verify'),
+        'noUrl' => __('No verification URL returned', 'didit-verify'),
+      ],
     ]);
 
     $bg = esc_attr(get_option('didit_btn_bg_color', '#2667ff'));
@@ -1392,7 +1577,7 @@ final class Didit_Verify
 
   private function page_needs_sdk()
   {
-    if (function_exists('is_checkout') && is_checkout() && 'checkout' === $this->wc_mode()) {
+    if (function_exists('is_checkout') && is_checkout() && 'checkout' === $this->wc_mode() && $this->wc_cart_requires_verification()) {
       return true;
     }
     if (
@@ -1417,8 +1602,8 @@ final class Didit_Verify
     static $instance = 0;
     $instance++;
 
-    $btn_text = get_option('didit_btn_text', 'Verify your Identity');
-    $btn_success = get_option('didit_btn_success_text', 'Identity Verified ✓');
+    $btn_text = $this->btn_text();
+    $btn_success = $this->btn_success_text();
 
     $a = shortcode_atts([
       'text' => $btn_text,
@@ -1545,6 +1730,9 @@ final class Didit_Verify
     add_action('woocommerce_admin_order_data_after_billing_address', [$this, 'wc_show_order_meta']);
     add_action('didit_wc_verification_reminder', [$this, 'wc_send_verification_reminder']);
 
+    add_action('woocommerce_product_options_advanced', [$this, 'wc_product_verification_field']);
+    add_action('woocommerce_admin_process_product_object', [$this, 'wc_product_save_verification_field']);
+
     if ('checkout' === $this->wc_mode()) {
       $hooks = [
         'before_checkout' => 'woocommerce_before_checkout_form',
@@ -1576,27 +1764,44 @@ final class Didit_Verify
     }
   }
 
+  public function wc_product_verification_field()
+  {
+    echo '<div class="options_group">';
+    woocommerce_wp_checkbox([
+      'id' => '_didit_verify',
+      'label' => __('Didit verification', 'didit-verify'),
+      'description' => __('Select this product for the "Only selected products" / "All products except selected" scope in the Didit Verify settings.', 'didit-verify'),
+    ]);
+    echo '</div>';
+  }
+
+  public function wc_product_save_verification_field($product)
+  {
+    // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the product-edit nonce before firing this hook.
+    $product->update_meta_data('_didit_verify', isset($_POST['_didit_verify']) ? 'yes' : 'no');
+  }
+
   public function wc_checkout_field()
   {
-    if ('checkout' !== $this->wc_mode()) {
+    if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
       return;
     }
     ?>
     <?php
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
-    $btn_text = esc_attr(get_option('didit_btn_text', 'Verify your Identity'));
-    $btn_success = esc_attr(get_option('didit_btn_success_text', 'Identity Verified ✓'));
+    $btn_text = $this->btn_text();
+    $btn_success = $this->btn_success_text();
     ?>
     <div id="didit-wc-verify" class="didit-verify-wrap"
       style="margin: 1.5em 0; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
-      <h3 style="margin-top:0;"><?php esc_html_e('Identity Verification', 'didit-verify'); ?></h3>
+      <h3 style="margin-top:0;"><?php echo esc_html($this->wc_box_title()); ?></h3>
       <p style="color:#666; font-size:0.9em;">
-        <?php esc_html_e('Please verify your identity before placing your order.', 'didit-verify'); ?>
+        <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
         data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" <?php if ($is_embedded)
              echo ' data-container="didit-wc-embed"'; ?>>
-        <?php echo esc_html(get_option('didit_btn_text', 'Verify your Identity')); ?>
+        <?php echo esc_html($btn_text); ?>
       </button>
       <input type="hidden" name="didit_session_id" id="didit_session_id" value="" />
       <?php if ($is_embedded): ?>
@@ -1608,7 +1813,7 @@ final class Didit_Verify
 
   public function wc_validate_checkout()
   {
-    if ('checkout' !== $this->wc_mode()) {
+    if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
       return;
     }
     // phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -1691,6 +1896,7 @@ final class Didit_Verify
       $rendered
       || !$this->customer_can_access_order($order)
       || in_array($order->get_status(), ['cancelled', 'refunded', 'failed'], true)
+      || !$this->wc_order_requires_verification($order)
     ) {
       return '';
     }
@@ -1704,7 +1910,7 @@ final class Didit_Verify
           <h3 style="margin-top:0;">%s</h3>
           <p style="color:#41D97F; font-weight:600; margin:0;">%s</p>
         </div>',
-        esc_html__('Identity Verification', 'didit-verify'),
+        esc_html($this->wc_box_title()),
         esc_html__('Your identity has been verified. Thank you!', 'didit-verify')
       );
     }
@@ -1715,18 +1921,18 @@ final class Didit_Verify
           <h3 style="margin-top:0;">%s</h3>
           <p style="color:#F59E0B; font-weight:600; margin:0;">%s</p>
         </div>',
-        esc_html__('Identity Verification', 'didit-verify'),
+        esc_html($this->wc_box_title()),
         esc_html__('Your verification is being reviewed. No further action is needed.', 'didit-verify')
       );
     }
 
     $intro = 'Declined' === $status
       ? __('Your previous verification attempt was declined. Please try again.', 'didit-verify')
-      : __('Please verify your identity to complete your order.', 'didit-verify');
+      : $this->wc_post_purchase_text();
 
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
-    $btn_text = get_option('didit_btn_text', 'Verify your Identity');
-    $btn_success = get_option('didit_btn_success_text', 'Identity Verified ✓');
+    $btn_text = $this->btn_text();
+    $btn_success = $this->btn_success_text();
 
     return sprintf(
       '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #ddd; border-radius:6px;">
@@ -1735,7 +1941,7 @@ final class Didit_Verify
         <button type="button" class="didit-verify-btn" data-text="%s" data-success="%s" data-order-id="%d" data-order-key="%s"%s>%s</button>
         %s
       </div>',
-      esc_html__('Identity Verification', 'didit-verify'),
+      esc_html($this->wc_box_title()),
       esc_html($intro),
       esc_attr($btn_text),
       esc_attr($btn_success),
@@ -1750,7 +1956,10 @@ final class Didit_Verify
   public function wc_mark_order_pending_verification($order)
   {
     $order = $order instanceof WC_Order ? $order : wc_get_order($order);
-    if (!$order || 'after_purchase' !== $this->wc_mode() || $order->get_meta('_didit_requires_verification')) {
+    if (
+      !$order || 'after_purchase' !== $this->wc_mode() || $order->get_meta('_didit_requires_verification')
+      || !$this->wc_order_requires_verification($order)
+    ) {
       return;
     }
     $order->update_meta_data('_didit_requires_verification', 'yes');
@@ -1874,26 +2083,26 @@ final class Didit_Verify
 
   public function wc_block_checkout_field($block_content)
   {
-    if ('checkout' !== $this->wc_mode()) {
+    if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
       return $block_content;
     }
 
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
-    $btn_text = esc_attr(get_option('didit_btn_text', 'Verify your Identity'));
-    $btn_success = esc_attr(get_option('didit_btn_success_text', 'Identity Verified ✓'));
+    $btn_text = $this->btn_text();
+    $btn_success = $this->btn_success_text();
 
     ob_start();
     ?>
     <div id="didit-wc-verify" class="didit-verify-wrap"
       style="margin: 1.5em 0; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
-      <h3 style="margin-top:0;"><?php esc_html_e('Identity Verification', 'didit-verify'); ?></h3>
+      <h3 style="margin-top:0;"><?php echo esc_html($this->wc_box_title()); ?></h3>
       <p style="color:#666; font-size:0.9em;">
-        <?php esc_html_e('Please verify your identity before placing your order.', 'didit-verify'); ?>
+        <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
         data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1"<?php if ($is_embedded)
              echo ' data-container="didit-wc-embed"'; ?>>
-        <?php echo esc_html(get_option('didit_btn_text', 'Verify your Identity')); ?>
+        <?php echo esc_html($btn_text); ?>
       </button>
       <?php if ($is_embedded): ?>
         <div class="didit-embed-container" id="didit-wc-embed"></div>
@@ -1917,6 +2126,10 @@ final class Didit_Verify
 
     $rest_route = $GLOBALS['wp']->query_vars['rest_route'] ?? '';
     if (!preg_match('#/wc/store(?:/v\d+)?/checkout$#', $rest_route)) {
+      return $result;
+    }
+
+    if (!$this->wc_cart_requires_verification()) {
       return $result;
     }
 

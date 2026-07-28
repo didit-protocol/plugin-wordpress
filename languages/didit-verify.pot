@@ -1,0 +1,671 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Didit Verify 0.3.0\n"
+"Report-Msgid-Bugs-To: https://github.com/didit-protocol/plugin-wordpress/issues\n"
+"POT-Creation-Date: 2026-07-28 00:00+0000\n"
+"PO-Revision-Date: 2026-07-28 00:00+0000\n"
+"Last-Translator: Didit <hello@didit.me>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: didit-verify build script\n"
+
+#: didit-verify.php:68
+msgid "Didit Verify"
+msgstr ""
+
+#: didit-verify.php:121
+msgid "Connection"
+msgstr ""
+
+#: didit-verify.php:122
+msgid "Mode"
+msgstr ""
+
+#: didit-verify.php:123
+msgid "UniLink URL"
+msgstr ""
+
+#: didit-verify.php:124
+msgid "Workflow ID"
+msgstr ""
+
+#: didit-verify.php:125
+msgid "API Key"
+msgstr ""
+
+#: didit-verify.php:127
+msgid "Session Options (API mode)"
+msgstr ""
+
+#: didit-verify.php:128
+msgid "Vendor Data"
+msgstr ""
+
+#: didit-verify.php:129
+msgid "Callback URL"
+msgstr ""
+
+#: didit-verify.php:130
+msgid "Callback Method"
+msgstr ""
+
+#: didit-verify.php:131
+msgid "Language"
+msgstr ""
+
+#: didit-verify.php:133
+msgid "Display Options"
+msgstr ""
+
+#: didit-verify.php:134
+msgid "Display Mode"
+msgstr ""
+
+#: didit-verify.php:135
+msgid "Close Button"
+msgstr ""
+
+#: didit-verify.php:136
+msgid "Exit Confirmation"
+msgstr ""
+
+#: didit-verify.php:137
+msgid "Auto-close"
+msgstr ""
+
+#: didit-verify.php:138
+msgid "Debug Logging"
+msgstr ""
+
+#: didit-verify.php:140
+msgid "Button Appearance"
+msgstr ""
+
+#: didit-verify.php:141
+msgid "Button Text"
+msgstr ""
+
+#: didit-verify.php:142
+msgid "Success Text"
+msgstr ""
+
+#: didit-verify.php:143
+msgid "Background Color"
+msgstr ""
+
+#: didit-verify.php:144
+msgid "Text Color"
+msgstr ""
+
+#: didit-verify.php:145
+msgid "Border Radius"
+msgstr ""
+
+#: didit-verify.php:146
+msgid "Padding"
+msgstr ""
+
+#: didit-verify.php:147
+msgid "Font Size"
+msgstr ""
+
+#: didit-verify.php:149
+msgid "Security"
+msgstr ""
+
+#: didit-verify.php:150
+msgid "Require Login"
+msgstr ""
+
+#: didit-verify.php:151
+msgid "Webhook Secret"
+msgstr ""
+
+#: didit-verify.php:153
+msgid "WooCommerce"
+msgstr ""
+
+#: didit-verify.php:154
+msgid "Verification Mode"
+msgstr ""
+
+#: didit-verify.php:155
+msgid "Product Scope"
+msgstr ""
+
+#: didit-verify.php:156
+msgid "Position"
+msgstr ""
+
+#: didit-verify.php:157
+msgid "Section Title"
+msgstr ""
+
+#: didit-verify.php:158
+msgid "Checkout Message"
+msgstr ""
+
+#: didit-verify.php:159
+msgid "Post-purchase Message"
+msgstr ""
+
+#: didit-verify.php:160
+msgid "Send Billing Data"
+msgstr ""
+
+#: didit-verify.php:161
+msgid "Hold Orders"
+msgstr ""
+
+#: didit-verify.php:162
+msgid "Reminders"
+msgstr ""
+
+#: didit-verify.php:189
+msgid "UniLink — no backend needed"
+msgstr ""
+
+#: didit-verify.php:191
+msgid "API Session — recommended for production"
+msgstr ""
+
+#: didit-verify.php:192
+msgid "UniLink uses a fixed URL. API mode creates a unique session per user (requires Workflow ID + API Key)."
+msgstr ""
+
+#: didit-verify.php:202
+msgid "Get this from Didit Console → Your Workflow → Copy Link."
+msgstr ""
+
+#: didit-verify.php:212
+msgid "Required for API mode. Found in Didit Console → Workflows."
+msgstr ""
+
+#: didit-verify.php:222
+msgid "Found in Didit Console → API & Webhooks. Stored server-side only — never sent to the browser."
+msgstr ""
+
+#: didit-verify.php:243
+msgid "WordPress User ID (e.g. wp-42)"
+msgstr ""
+
+#: didit-verify.php:245
+msgid "User Email (e.g. john@example.com)"
+msgstr ""
+
+#: didit-verify.php:247
+msgid "Custom prefix + User ID"
+msgstr ""
+
+#: didit-verify.php:249
+msgid "None — do not send vendor data"
+msgstr ""
+
+#: didit-verify.php:250
+msgid "Identifies each user in the Didit dashboard. Allows session tracking and aggregation across multiple verifications."
+msgstr ""
+
+#: didit-verify.php:253
+msgid "Prefix prepended to the User ID (e.g. \"mystore-\" → \"mystore-42\"). Leave empty for just the ID."
+msgstr ""
+
+#: didit-verify.php:263
+msgid "URL to redirect the user after verification completes. Didit appends verificationSessionId and status as query parameters. Leave empty to disable."
+msgstr ""
+
+#: didit-verify.php:279
+msgid "— Default (initiator) —"
+msgstr ""
+
+#: didit-verify.php:281
+msgid "Initiator — redirect the device that started the flow"
+msgstr ""
+
+#: didit-verify.php:283
+msgid "Completer — redirect the device that finishes the flow"
+msgstr ""
+
+#: didit-verify.php:285
+msgid "Both — either device can trigger the callback"
+msgstr ""
+
+#: didit-verify.php:286
+msgid "Determines which device handles the redirect to the callback URL after verification."
+msgstr ""
+
+#: didit-verify.php:351
+msgid "Language for the verification UI shown to the user. Auto-detect uses the browser language."
+msgstr ""
+
+#: didit-verify.php:364
+msgid "Modal (popup) — opens over the page"
+msgstr ""
+
+#: didit-verify.php:366
+msgid "Embedded (inline) — appears where the shortcode is placed"
+msgstr ""
+
+#: didit-verify.php:367
+msgid "Modal opens a centered overlay. Embedded renders the verification directly on the page where you placed [didit_verify] or the WooCommerce checkout section."
+msgstr ""
+
+#: didit-verify.php:377
+msgid "Show close (X) button on the verification modal"
+msgstr ""
+
+#: didit-verify.php:378
+msgid "Uncheck to force users to complete verification (no way to close the modal). Useful for mandatory verification flows."
+msgstr ""
+
+#: didit-verify.php:388
+msgid "Show \"Are you sure?\" dialog when closing the modal"
+msgstr ""
+
+#: didit-verify.php:389
+msgid "Prevents accidental exits. Uncheck for a frictionless experience."
+msgstr ""
+
+#: didit-verify.php:399
+msgid "Automatically close the modal when verification completes"
+msgstr ""
+
+#: didit-verify.php:400
+msgid "If unchecked, the modal stays open showing the result. Useful for WooCommerce checkout to return the user to the order flow quickly."
+msgstr ""
+
+#: didit-verify.php:410
+msgid "Enable SDK debug logging in the browser console"
+msgstr ""
+
+#: didit-verify.php:411
+msgid "Logs all postMessage events and state changes. Only enable for troubleshooting."
+msgstr ""
+
+#: didit-verify.php:427
+msgid "Live preview — changes update when you modify the fields below."
+msgstr ""
+
+#: didit-verify.php:453
+msgid "Verify your Identity"
+msgstr ""
+
+#: didit-verify.php:454
+msgid "Label shown on the button before verification. Leave empty to use the default text, which follows the site language."
+msgstr ""
+
+#: didit-verify.php:464
+msgid "Identity Verified ✓"
+msgstr ""
+
+#: didit-verify.php:465
+msgid "Label shown after successful verification. Leave empty to use the default text, which follows the site language."
+msgstr ""
+
+#: didit-verify.php:475
+msgid "Button background color."
+msgstr ""
+
+#: didit-verify.php:485
+msgid "Button text color."
+msgstr ""
+
+#: didit-verify.php:495
+msgid "Corner rounding in pixels. 0 = square, 50 = pill shape."
+msgstr ""
+
+#: didit-verify.php:507
+msgid "Vertical × Horizontal padding in pixels."
+msgstr ""
+
+#: didit-verify.php:517
+msgid "Button font size in pixels."
+msgstr ""
+
+#: didit-verify.php:527
+msgid "Only logged-in WordPress users can create verification sessions"
+msgstr ""
+
+#: didit-verify.php:528
+msgid "Strongly recommended. Prevents anonymous abuse. Uncheck only if you need guest checkout in WooCommerce."
+msgstr ""
+
+#: didit-verify.php:535
+msgid "WooCommerce is not active."
+msgstr ""
+
+#: didit-verify.php:547
+msgid "Off — no verification in WooCommerce"
+msgstr ""
+
+#: didit-verify.php:549
+msgid "Require at checkout — order cannot be placed until verified"
+msgstr ""
+
+#: didit-verify.php:551
+msgid "After purchase — low-barrier checkout, verify on the order confirmation page"
+msgstr ""
+
+#: didit-verify.php:552
+msgid "After-purchase mode shows the verification box on the order confirmation page, My Account order view, and order emails."
+msgstr ""
+
+#: didit-verify.php:571
+msgid "All products — verification applies to every order"
+msgstr ""
+
+#: didit-verify.php:573
+msgid "Only selected products — require verification only when the cart contains a selected product"
+msgstr ""
+
+#: didit-verify.php:575
+msgid "All products except selected — skip verification only when every product in the cart is selected"
+msgstr ""
+
+#: didit-verify.php:576
+msgid "Select products on the product edit page: Product data → Advanced → \"Didit verification\". Mixed carts require verification whenever at least one product in the cart requires it."
+msgstr ""
+
+#: didit-verify.php:590
+msgid "Hold orders (status \"On hold\") until identity verification is approved"
+msgstr ""
+
+#: didit-verify.php:591
+msgid "After-purchase mode only. Orders are released to \"Processing\" automatically when the Didit webhook reports approval — configure the Webhook Secret below for this to work."
+msgstr ""
+
+#: didit-verify.php:607
+msgid "Email customers who have not completed verification"
+msgstr ""
+
+#: didit-verify.php:608
+msgid "Every"
+msgstr ""
+
+#: didit-verify.php:610
+msgid "day(s), at most"
+msgstr ""
+
+#: didit-verify.php:612
+msgid "reminder(s) per order."
+msgstr ""
+
+#: didit-verify.php:613
+msgid "After-purchase mode only. Reminders stop as soon as the verification is approved or declined, or the order is cancelled."
+msgstr ""
+
+#: didit-verify.php:623
+msgid "Webhook secret from the Didit Business Console (API & Webhooks). Point the webhook destination to:"
+msgstr ""
+
+#: didit-verify.php:644
+msgid "Top of checkout page — verify before filling the form"
+msgstr ""
+
+#: didit-verify.php:646
+msgid "After billing details — verify after entering name & address"
+msgstr ""
+
+#: didit-verify.php:648
+msgid "After order notes — verify after all customer fields"
+msgstr ""
+
+#: didit-verify.php:650
+msgid "Before \"Place Order\" (recommended) — last step before payment"
+msgstr ""
+
+#: didit-verify.php:651
+msgid "Where the verification section appears on the checkout page."
+msgstr ""
+
+#: didit-verify.php:673
+msgid "Identity Verification"
+msgstr ""
+
+#: didit-verify.php:678
+msgid "Please verify your identity before placing your order."
+msgstr ""
+
+#: didit-verify.php:683
+msgid "Please verify your identity to complete your order."
+msgstr ""
+
+#: didit-verify.php:697
+msgid "Heading of the verification section at checkout and after purchase. Leave empty to use the default text, which follows the site language."
+msgstr ""
+
+#: didit-verify.php:712
+msgid "Message shown in the verification section on the checkout page. Leave empty to use the default text, which follows the site language."
+msgstr ""
+
+#: didit-verify.php:727
+msgid "Message shown in the verification section after purchase (order confirmation page, My Account, emails). Leave empty to use the default text, which follows the site language."
+msgstr ""
+
+#: didit-verify.php:741
+msgid "Auto-send checkout billing data as expected_details & contact_details"
+msgstr ""
+
+#: didit-verify.php:742
+msgid "Sends name, email, phone, address, and country from the checkout form to Didit for pre-filling and cross-checking."
+msgstr ""
+
+#: didit-verify.php:753
+msgid "Didit Identity Verification"
+msgstr ""
+
+#: didit-verify.php:762
+msgid "Shortcodes"
+msgstr ""
+
+#: didit-verify.php:765
+msgid "Verification button styled with the settings above. Place on any page or post."
+msgstr ""
+
+#: didit-verify.php:769
+msgid "Override the button text for a specific page."
+msgstr ""
+
+#: didit-verify.php:771
+msgid "Status & Content Gating"
+msgstr ""
+
+#: didit-verify.php:774
+msgid "Shows \"Identity Verified\" or \"Not Verified\" for the logged-in user."
+msgstr ""
+
+#: didit-verify.php:778
+msgid "Content inside is only visible to verified users. Others see a verification prompt."
+msgstr ""
+
+#: didit-verify.php:811
+msgid "Invalid security token."
+msgstr ""
+
+#: didit-verify.php:819
+msgid "You must be logged in to start verification."
+msgstr ""
+
+#: didit-verify.php:853
+msgid "Didit API credentials are not configured."
+msgstr ""
+
+#: didit-verify.php:972
+msgid "Didit API error"
+msgstr ""
+
+#: didit-verify.php:981
+msgid "No verification URL returned."
+msgstr ""
+
+#: didit-verify.php:992
+msgid "Didit: verification session created (%s)."
+msgstr ""
+
+#: didit-verify.php:1046
+msgid "Webhook secret is not configured."
+msgstr ""
+
+#: didit-verify.php:1054
+msgid "Missing or stale webhook signature."
+msgstr ""
+
+#: didit-verify.php:1059
+msgid "Webhook signature mismatch."
+msgstr ""
+
+#: didit-verify.php:1064
+msgid "Invalid webhook payload."
+msgstr ""
+
+#: didit-verify.php:1129
+msgid "Too many verification requests. Please try again later."
+msgstr ""
+
+#: didit-verify.php:1475
+msgid "Didit: verification status \"%1$s\" (via %2$s)."
+msgstr ""
+
+#: didit-verify.php:1484
+msgid "Didit: identity verified — order released."
+msgstr ""
+
+#: didit-verify.php:1554
+msgid "Creating session…"
+msgstr ""
+
+#: didit-verify.php:1555
+msgid "Verification In Review"
+msgstr ""
+
+#: didit-verify.php:1556
+msgid "Verification error:"
+msgstr ""
+
+#: didit-verify.php:1557
+msgid "No verification URL returned"
+msgstr ""
+
+#: didit-verify.php:1639
+msgid "Identity Verified"
+msgstr ""
+
+#: didit-verify.php:1640
+msgid "Not Verified"
+msgstr ""
+
+#: didit-verify.php:1641
+msgid "Verification Declined"
+msgstr ""
+
+#: didit-verify.php:1643
+msgid "Please log in"
+msgstr ""
+
+#: didit-verify.php:1668
+msgid "Please verify your identity to access this content."
+msgstr ""
+
+#: didit-verify.php:1674
+msgid "Please log in to access this content."
+msgstr ""
+
+#: didit-verify.php:1686
+msgid "Your identity verification is being reviewed. Please check back shortly."
+msgstr ""
+
+#: didit-verify.php:1699
+msgid "Didit"
+msgstr ""
+
+#: didit-verify.php:1713
+msgid "Verified on %s"
+msgstr ""
+
+#: didit-verify.php:1713
+msgid "Approved"
+msgstr ""
+
+#: didit-verify.php:1717
+msgid "Declined on %s"
+msgstr ""
+
+#: didit-verify.php:1717
+msgid "Declined"
+msgstr ""
+
+#: didit-verify.php:1721
+msgid "In review since %s"
+msgstr ""
+
+#: didit-verify.php:1721
+msgid "In Review"
+msgstr ""
+
+#: didit-verify.php:1725
+msgid "Not verified"
+msgstr ""
+
+#: didit-verify.php:1772
+msgid "Didit verification"
+msgstr ""
+
+#: didit-verify.php:1773
+msgid "Select this product for the \"Only selected products\" / \"All products except selected\" scope in the Didit Verify settings."
+msgstr ""
+
+#: didit-verify.php:1826
+msgid "Please complete identity verification before placing your order."
+msgstr ""
+
+#: didit-verify.php:1856
+msgid "Didit Verification:"
+msgstr ""
+
+#: didit-verify.php:1914
+msgid "Your identity has been verified. Thank you!"
+msgstr ""
+
+#: didit-verify.php:1925
+msgid "Your verification is being reviewed. No further action is needed."
+msgstr ""
+
+#: didit-verify.php:1930
+msgid "Your previous verification attempt was declined. Please try again."
+msgstr ""
+
+#: didit-verify.php:1984
+msgid "Didit: order held until identity verification is approved."
+msgstr ""
+
+#: didit-verify.php:2003
+msgid "Please verify your identity to complete your order:"
+msgstr ""
+
+#: didit-verify.php:2011
+msgid "Identity verification required"
+msgstr ""
+
+#: didit-verify.php:2014
+msgid "Verify your identity"
+msgstr ""
+
+#: didit-verify.php:2054
+msgid "Action required: verify your identity for order #%s"
+msgstr ""
+
+#: didit-verify.php:2059
+msgid "Your order is waiting for identity verification. It only takes a couple of minutes."
+msgstr ""
+
+#: didit-verify.php:2061
+msgid "Verify your identity now"
+msgstr ""
+
+#: didit-verify.php:2070
+msgid "Didit: verification reminder %1$d of %2$d sent to %3$s."
+msgstr ""
+

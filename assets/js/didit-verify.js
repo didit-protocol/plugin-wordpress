@@ -5,6 +5,7 @@
   if (!cfg || !window.DiditSDK) return;
 
   var DiditSdk = window.DiditSDK.DiditSdk;
+  var i18n = cfg.i18n || {};
 
   DiditSdk.shared.onComplete = function (result) {
     var status = result.session ? result.session.status : "";
@@ -20,7 +21,7 @@
         btn.textContent = btn.dataset.text || "Verify Identity";
         btn.disabled = false;
       } else if (result.type === "completed") {
-        btn.textContent = "Verification In Review";
+        btn.textContent = i18n.inReview || "Verification In Review";
         btn.classList.add("didit-in-review");
         btn.disabled = true;
       } else {
@@ -136,7 +137,7 @@
     if (cfg.mode === "unilink") {
       startSdk(cfg.unilinkUrl, btn);
     } else {
-      btn.textContent = "Creating session\u2026";
+      btn.textContent = i18n.creatingSession || "Creating session\u2026";
 
       var requestBody = {};
       if (btn.dataset.wc && cfg.sendBilling) {
@@ -164,11 +165,11 @@
           return r.json();
         })
         .then(function (data) {
-          if (!data.url) throw new Error("No verification URL returned");
+          if (!data.url) throw new Error(i18n.noUrl || "No verification URL returned");
           startSdk(data.url, btn);
         })
         .catch(function (err) {
-          alert("Verification error: " + err.message);
+          alert((i18n.verificationError || "Verification error:") + " " + err.message);
           resetBtn(btn);
         });
     }
