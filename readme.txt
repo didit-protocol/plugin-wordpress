@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -41,8 +41,15 @@ Didit Verify lets you require identity verification on your WordPress site. Drop
 **WooCommerce support:**
 
 * Require verification at checkout with 4 position options
+* Product scope: require verification for all products, only selected products, or all products except selected — with a per-product checkbox in the product editor
+* Customizable checkout copy: section title, checkout message, and post-purchase message editable from settings
 * Automatically send billing data (name, email, phone, address) to Didit for pre-filling and cross-validation
 * Verification session ID saved to order meta for audit
+
+**Translations:**
+
+* All customer-facing text is translatable (text domain `didit-verify`, POT file included)
+* German translations included: `de_DE` (informal) and `de_DE_formal` (formal)
 
 **Developer extensibility:**
 
@@ -164,6 +171,23 @@ A live preview updates in real time as you change values. You can also override 
 
 The button has CSS class `didit-verify-btn` (and `didit-verified` after success) for further styling.
 
+= Can I change or translate the checkout page text? =
+
+Yes, both ways:
+
+* **Change it**: go to **Settings → Didit Verify → WooCommerce** and set **Section Title**, **Checkout Message**, and **Post-purchase Message**. Empty fields use the default text.
+* **Translate it**: the plugin ships with German translations (`de_DE` and `de_DE_formal`) and a POT file (`languages/didit-verify.pot`) for other languages. Default texts automatically follow the site language.
+
+= Can I require verification only for certain products? =
+
+Yes. Go to **Settings → Didit Verify → WooCommerce → Product Scope** and choose:
+
+* **All products** — verification applies to every order (default)
+* **Only selected products** — verification is required only when the cart contains a selected product
+* **All products except selected** — verification is skipped only when every product in the cart is selected
+
+Select products on the product edit page under **Product data → Advanced → Didit verification**. Mixed carts require verification whenever at least one product in the cart requires it. The scope applies to both checkout and after-purchase modes.
+
 = Can I switch between modal and embedded display? =
 
 Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. Choose Modal (popup overlay) or Embedded (inline where the shortcode is). You can also override per shortcode:
@@ -178,6 +202,15 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 4. WooCommerce checkout with verification step.
 
 == Changelog ==
+
+= 0.3.0 =
+* Customizable WooCommerce copy: new settings for the verification section title, checkout message, and post-purchase message (GitHub issue #2).
+* Translation support: load the plugin text domain from `languages/`, POT file included, and German translations (`de_DE` informal, `de_DE_formal` formal) for all customer-facing text (GitHub issue #2).
+* Frontend JavaScript strings ("Creating session…", "Verification In Review", error messages) are now translatable.
+* Product scope for WooCommerce verification: require verification for all products, only selected products, or all products except selected (GitHub issue #3).
+* New "Didit verification" checkbox on the product edit page (Product data → Advanced) to select products for the include/exclude scope.
+* Product scope is enforced in classic checkout, block checkout, and after-purchase mode (confirmation box, emails, reminders, order hold).
+* Button text and success text settings now fall back to translatable defaults when left empty.
 
 = 0.2.0 =
 * New WooCommerce verification mode: "After purchase" — keep checkout low-barrier and ask for verification on the order confirmation page, My Account order view, and order emails (GitHub issue #1).
@@ -227,6 +260,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.3.0 =
+Customizable checkout copy, German translations, and per-product verification scope for WooCommerce.
 
 = 0.1.4 =
 Match verification status handling between woocommerce and wordpress

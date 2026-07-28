@@ -10,7 +10,9 @@ Identity verification for WordPress & WooCommerce using the [Didit SDK](https://
 | **WooCommerce** | Require identity verification at checkout |
 | **Two modes** | **UniLink** (no backend, paste a URL) or **API** (unique sessions per user) |
 | **Display** | Modal (popup overlay) or Embedded (inline) |
-| **Customizable** | Button colors, text, padding, radius — all configurable with live preview |
+| **Customizable** | Button colors, text, padding, radius — all configurable with live preview. Checkout section title and messages editable too |
+| **Translatable** | All customer-facing text is translatable; German (`de_DE`, `de_DE_formal`) included |
+| **Product scope** | Require verification for all products, only selected products, or all except selected |
 | **Secure** | API key stays server-side; CSRF nonce + rate limiting on session endpoint |
 
 ## Third-Party Service
@@ -147,6 +149,25 @@ Choose a **Verification Mode** in settings:
 | **Require at checkout** | The order cannot be placed until the customer verifies (blocks "Place Order") |
 | **After purchase** | Low-barrier checkout — the customer verifies on the order confirmation page |
 
+#### Product scope
+
+Choose which products trigger verification (**Settings → Didit Verify → WooCommerce → Product Scope**):
+
+| Scope | Behavior |
+|-------|----------|
+| **All products** (default) | Verification applies to every order |
+| **Only selected products** | Verification is required only when the cart contains a selected product |
+| **All products except selected** | Verification is skipped only when every product in the cart is selected |
+
+Select products on the product edit page under **Product data → Advanced → Didit verification**.
+Mixed carts require verification whenever at least one product in the cart requires it.
+The scope applies to both checkout and after-purchase modes (including confirmation box, order emails, reminders, and order hold).
+
+#### Checkout copy
+
+The verification section text is editable from settings (**Section Title**, **Checkout Message**, **Post-purchase Message**).
+Fields left empty use the default text, which follows the site language — German translations (`de_DE` informal, `de_DE_formal` formal) ship with the plugin, and `languages/didit-verify.pot` is included for other languages.
+
 #### Require at checkout
 
 1. Choose a **Position** for the verification section:
@@ -242,6 +263,7 @@ wordpress-plugin/
 ├── assets/
 │   ├── css/didit-verify.css      # Structural styles (embed container)
 │   └── js/didit-verify.js        # Frontend SDK integration
+├── languages/                    # POT template + German translations (de_DE, de_DE_formal)
 ├── uninstall.php                 # Cleans up options on plugin deletion
 ├── readme.txt                    # WordPress.org plugin directory format
 ├── docker-compose.yml            # Local dev (WordPress + MySQL)
