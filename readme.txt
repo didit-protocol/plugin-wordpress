@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -202,6 +202,13 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 4. WooCommerce checkout with verification step.
 
 == Changelog ==
+
+= 0.3.1 =
+* Webhook receiver now verifies `X-Signature-V2` first, falls back to the legacy `X-Signature`, and finally to `X-Signature-Simple`. A delivery is accepted as soon as one variant verifies, so a reverse proxy, CDN rule or security plugin that strips a single `X-*` header no longer causes a 401 "Missing or stale webhook signature".
+* Middleware that re-encodes the request body (Unicode escaping, slash escaping, key reordering) no longer breaks verification: `X-Signature-V2` is computed over the canonical JSON form rather than the raw bytes.
+* Freshness is now checked against the signed `timestamp` inside the payload, which also rejects a replayed delivery re-sent with a refreshed `X-Timestamp` header.
+* When only `X-Signature-Simple` verifies, the payload is authenticated for `session_id`, `status` and `webhook_type` only, so the user is resolved from the session mapping this site stored itself instead of the unsigned `metadata.wp_user_id` / `vendor_data` fields.
+* Enabling Debug Logging now records which signature headers arrived when a webhook is rejected.
 
 = 0.3.0 =
 * Customizable WooCommerce copy: new settings for the verification section title, checkout message, and post-purchase message (GitHub issue #2).

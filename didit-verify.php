@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.0
+ * Version:     0.3.1
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.0');
+define('DIDIT_VERIFY_VERSION', '0.3.1');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -1039,6 +1039,156 @@ final class Didit_Verify
     return rest_ensure_response(['saved' => true]);
   }
 
+  /**
+   * Rebuild the canonical JSON form Didit signs for X-Signature-V2.
+   *
+   * Didit produces the signed string with
+   * `json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`.
+   * Three PHP defaults break that reproduction and each one changes the bytes, so
+   * the digest never matches if any is left alone:
+   *
+   * - an associative `json_decode` collapses empty objects (`{}`) into empty arrays,
+   *   which re-encode as `[]` - Didit payloads carry empty maps routinely, so the
+   *   value is decoded into stdClass here instead;
+   * - `ksort` compares numeric-looking keys numerically, sorting `"9"` before `"10"`,
+   *   while Python sorts by code point - hence SORT_STRING;
+   * - `json_encode` escapes slashes and non-ASCII, which `ensure_ascii=False` does not.
+   *
+   * @param mixed $value Decoded payload node (objects as stdClass).
+   * @return mixed Node with every object's keys recursively sorted.
+   */
+  private static function canonicalize_signed_payload($value)
+  {
+    if ($value instanceof stdClass) {
+      $props = get_object_vars($value);
+      ksort($props, SORT_STRING);
+      $sorted = new stdClass();
+      foreach ($props as $key => $item) {
+        $sorted->{$key} = self::canonicalize_signed_payload($item);
+      }
+      return $sorted;
+    }
+
+    if (is_array($value)) {
+      // JSON arrays keep their order; only object keys are sorted.
+      return array_map(
+        function ($item) {
+          return self::canonicalize_signed_payload($item);
+        },
+        $value
+      );
+    }
+
+    return $value;
+  }
+
+  /**
+   * X-Signature-V2 - HMAC over the canonical JSON re-encoding of the body.
+   *
+   * Survives middleware that re-encodes the request body, which is the failure the
+   * raw-bytes variant cannot recover from.
+   */
+  private static function verify_signature_v2($raw, $signature, $secret)
+  {
+    $decoded = json_decode($raw, false);
+    if (JSON_ERROR_NONE !== json_last_error()) {
+      return false;
+    }
+
+    $canonical = json_encode( // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+      self::canonicalize_signed_payload($decoded),
+      JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+    );
+    if (false === $canonical) {
+      return false;
+    }
+
+    return hash_equals(hash_hmac('sha256', $canonical, $secret), $signature);
+  }
+
+  /**
+   * X-Signature (legacy) - HMAC over the exact bytes Didit transmitted.
+   *
+   * Only valid while nothing between Didit and PHP rewrites the body.
+   */
+  private static function verify_signature_raw($raw, $signature, $secret)
+  {
+    return hash_equals(hash_hmac('sha256', $raw, $secret), $signature);
+  }
+
+  /**
+   * X-Signature-Simple - HMAC over "{timestamp}:{session_id}:{status}:{webhook_type}".
+   *
+   * Encoding-independent, so it survives anything, but it authenticates the envelope
+   * only: every other field of the payload is unsigned under this variant. Callers
+   * must treat the rest of the body as untrusted - see rest_webhook().
+   */
+  private static function verify_signature_simple(array $payload, $signature, $secret)
+  {
+    $canonical = implode(':', [
+      (string) ($payload['timestamp'] ?? ''),
+      (string) ($payload['session_id'] ?? ''),
+      (string) ($payload['status'] ?? ''),
+      (string) ($payload['webhook_type'] ?? ''),
+    ]);
+
+    return hash_equals(hash_hmac('sha256', $canonical, $secret), $signature);
+  }
+
+  /**
+   * Verify a delivery against every signature variant Didit sends, strongest first.
+   *
+   * Didit sends X-Signature, X-Signature-V2 and X-Signature-Simple on every delivery,
+   * but reverse proxies, CDN header rules and WordPress security plugins drop
+   * individual `X-*` headers, and body-rewriting middleware invalidates the raw-bytes
+   * digest even when its header arrives. Trying each variant means one surviving
+   * header is enough.
+   *
+   * @return string Variant that verified ('v2', 'raw', 'simple'), or '' if none did.
+   */
+  private static function verify_webhook_signature($request, $raw, array $payload, $secret)
+  {
+    $v2 = $request->get_header('x_signature_v2');
+    if (is_string($v2) && '' !== $v2 && self::verify_signature_v2($raw, $v2, $secret)) {
+      return 'v2';
+    }
+
+    $legacy = $request->get_header('x_signature');
+    if (is_string($legacy) && '' !== $legacy && self::verify_signature_raw($raw, $legacy, $secret)) {
+      return 'raw';
+    }
+
+    $simple = $request->get_header('x_signature_simple');
+    if (is_string($simple) && '' !== $simple && self::verify_signature_simple($payload, $simple, $secret)) {
+      return 'simple';
+    }
+
+    return '';
+  }
+
+  /**
+   * Resolve the WordPress user a session belongs to from stored state.
+   *
+   * The session id is written to user meta when the verification is saved, so this
+   * mapping is local and trustworthy - unlike the payload's `metadata.wp_user_id` and
+   * `vendor_data`, which X-Signature-Simple does not authenticate.
+   */
+  private function user_id_for_session($session_id)
+  {
+    if (!$session_id) {
+      return 0;
+    }
+
+    $users = get_users([
+      'meta_key' => '_didit_session_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+      'meta_value' => $session_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+      'number' => 1,
+      'fields' => 'ID',
+    ]);
+
+    return $users ? absint($users[0]) : 0;
+  }
+
   public function rest_webhook($request)
   {
     $secret = get_option('didit_webhook_secret', '');
@@ -1047,22 +1197,44 @@ final class Didit_Verify
     }
 
     $raw = $request->get_body();
-    $signature = $request->get_header('x_signature');
-    $timestamp = (int) $request->get_header('x_timestamp');
-
-    if (!$signature || !$timestamp || abs(time() - $timestamp) > 5 * MINUTE_IN_SECONDS) {
-      return new WP_Error('invalid_request', __('Missing or stale webhook signature.', 'didit-verify'), ['status' => 401]);
-    }
-
-    $expected = hash_hmac('sha256', $raw, $secret);
-    if (!hash_equals($expected, $signature)) {
-      return new WP_Error('invalid_signature', __('Webhook signature mismatch.', 'didit-verify'), ['status' => 401]);
-    }
-
     $payload = json_decode($raw, true);
     if (!is_array($payload)) {
       return new WP_Error('invalid_payload', __('Invalid webhook payload.', 'didit-verify'), ['status' => 400]);
     }
+
+    // Prefer the body's `timestamp` over the X-Timestamp header: Didit sets both to
+    // the same value, but only the body copy is covered by all three signatures, so
+    // checking it rejects a replayed delivery re-sent with a freshened header. It also
+    // keeps the freshness check working when a proxy strips X-Timestamp along with the
+    // signature headers.
+    $timestamp = (int) ($payload['timestamp'] ?? 0);
+    if (!$timestamp) {
+      $timestamp = (int) $request->get_header('x_timestamp');
+    }
+
+    if (!$timestamp || abs(time() - $timestamp) > 5 * MINUTE_IN_SECONDS) {
+      return new WP_Error('invalid_request', __('Missing or stale webhook signature.', 'didit-verify'), ['status' => 401]);
+    }
+
+    $verified_with = self::verify_webhook_signature($request, $raw, $payload, $secret);
+    if (!$verified_with) {
+      if (get_option('didit_logging', false)) {
+        error_log(sprintf( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+          'Didit webhook signature mismatch. Headers received: %s',
+          implode(', ', array_filter([
+            $request->get_header('x_signature_v2') ? 'X-Signature-V2' : '',
+            $request->get_header('x_signature') ? 'X-Signature' : '',
+            $request->get_header('x_signature_simple') ? 'X-Signature-Simple' : '',
+            $request->get_header('x_timestamp') ? 'X-Timestamp' : '',
+          ])) ?: 'none'
+        ));
+      }
+      return new WP_Error('invalid_signature', __('Webhook signature mismatch.', 'didit-verify'), ['status' => 401]);
+    }
+
+    // X-Signature-Simple signs the envelope only, so everything outside
+    // timestamp/session_id/status/webhook_type stays unauthenticated on that path.
+    $body_is_signed = ('simple' !== $verified_with);
 
     if ('status.updated' !== ($payload['webhook_type'] ?? '')) {
       return rest_ensure_response(['received' => true, 'ignored' => true]);
@@ -1084,10 +1256,18 @@ final class Didit_Verify
       }
     }
 
-    $meta = is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [];
-    $wp_user_id = absint($meta['wp_user_id'] ?? 0);
-    if (!$wp_user_id && preg_match('/^wp-(\d+)$/', (string) ($payload['vendor_data'] ?? ''), $m)) {
-      $wp_user_id = absint($m[1]);
+    $wp_user_id = 0;
+    if ($body_is_signed) {
+      $meta = is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [];
+      $wp_user_id = absint($meta['wp_user_id'] ?? 0);
+      if (!$wp_user_id && preg_match('/^wp-(\d+)$/', (string) ($payload['vendor_data'] ?? ''), $m)) {
+        $wp_user_id = absint($m[1]);
+      }
+    }
+    if (!$wp_user_id) {
+      // Falls back to the session -> user mapping this site stored itself, which is the
+      // only usable source when the payload is unsigned beyond the envelope.
+      $wp_user_id = $this->user_id_for_session($session_id);
     }
     if ($wp_user_id && get_userdata($wp_user_id)) {
       update_user_meta($wp_user_id, '_didit_session_id', $session_id);
