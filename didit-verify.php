@@ -26,6 +26,7 @@ final class Didit_Verify
 {
 
   private $block_session_id = '';
+  private $sdk_assets_enqueued = false;
 
   public static function init()
   {
@@ -1713,6 +1714,17 @@ final class Didit_Verify
       return;
     }
 
+    $this->enqueue_sdk_assets();
+  }
+
+  private function enqueue_sdk_assets()
+  {
+    if ($this->sdk_assets_enqueued) {
+      return;
+    }
+
+    $this->sdk_assets_enqueued = true;
+
     $sdk_url = apply_filters('didit_sdk_url', DIDIT_VERIFY_URL . 'assets/js/didit-sdk.umd.min.js');
 
     wp_enqueue_style('didit-verify', DIDIT_VERIFY_URL . 'assets/css/didit-verify.css', [], DIDIT_VERIFY_VERSION);
@@ -1779,6 +1791,8 @@ final class Didit_Verify
 
   public function render_shortcode($atts)
   {
+    $this->enqueue_sdk_assets();
+
     static $instance = 0;
     $instance++;
 
