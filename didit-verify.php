@@ -26,7 +26,8 @@ final class Didit_Verify
 {
 
   private $block_session_id = '';
-  private $sdk_assets_enqueued = false;
+  private $sdk_styles_enqueued = false;
+  private $sdk_scripts_enqueued = false;
 
   public static function init()
   {
@@ -1710,6 +1711,8 @@ final class Didit_Verify
 
   public function enqueue_scripts()
   {
+    $this->enqueue_sdk_styles();
+
     if (!$this->page_needs_sdk()) {
       return;
     }
@@ -1719,15 +1722,48 @@ final class Didit_Verify
 
   private function enqueue_sdk_assets()
   {
-    if ($this->sdk_assets_enqueued) {
+    $this->enqueue_sdk_styles();
+    $this->enqueue_sdk_scripts();
+  }
+
+  private function enqueue_sdk_styles()
+  {
+    if ($this->sdk_styles_enqueued) {
       return;
     }
 
-    $this->sdk_assets_enqueued = true;
+    $this->sdk_styles_enqueued = true;
+
+
+    wp_enqueue_style('didit-verify', DIDIT_VERIFY_URL . 'assets/css/didit-verify.css', [], DIDIT_VERIFY_VERSION);
+
+    $bg = esc_attr(get_option('didit_btn_bg_color', '#2667ff'));
+    $tc = esc_attr(get_option('didit_btn_text_color', '#ffffff'));
+    $rad = (int) get_option('didit_btn_border_radius', 8);
+    $pv = (int) get_option('didit_btn_padding_v', 12);
+    $ph = (int) get_option('didit_btn_padding_h', 24);
+    $fs = (int) get_option('didit_btn_font_size', 16);
+
+    $css = ".didit-verify-btn{background:{$bg};color:{$tc};border:none;border-radius:{$rad}px;padding:{$pv}px {$ph}px;font-size:{$fs}px;font-weight:600;font-family:inherit;cursor:pointer;line-height:1.4;transition:opacity .2s,box-shadow .2s;}"
+      . ".didit-verify-btn:hover{opacity:.9;box-shadow:0 4px 12px rgba(0,0,0,.2);}"
+      . ".didit-verify-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}"
+      . ".didit-verify-btn.didit-verified{background:#41D97F;opacity:1;}"
+      . ".didit-verify-btn.didit-in-review{background:#F59E0B;opacity:1;}"
+      . ".didit-verify-btn.didit-declined{background:{$bg};}";
+
+    wp_add_inline_style('didit-verify', $css);
+  }
+
+  private function enqueue_sdk_scripts()
+  {
+    if ($this->sdk_scripts_enqueued) {
+      return;
+    }
+
+    $this->sdk_scripts_enqueued = true;
 
     $sdk_url = apply_filters('didit_sdk_url', DIDIT_VERIFY_URL . 'assets/js/didit-sdk.umd.min.js');
 
-    wp_enqueue_style('didit-verify', DIDIT_VERIFY_URL . 'assets/css/didit-verify.css', [], DIDIT_VERIFY_VERSION);
     wp_enqueue_script('didit-sdk', $sdk_url, [], DIDIT_VERIFY_VERSION, true);
     wp_enqueue_script('didit-verify', DIDIT_VERIFY_URL . 'assets/js/didit-verify.js', ['didit-sdk'], DIDIT_VERIFY_VERSION, true);
 
@@ -1749,22 +1785,6 @@ final class Didit_Verify
         'noUrl' => __('No verification URL returned', 'didit-verify'),
       ],
     ]);
-
-    $bg = esc_attr(get_option('didit_btn_bg_color', '#2667ff'));
-    $tc = esc_attr(get_option('didit_btn_text_color', '#ffffff'));
-    $rad = (int) get_option('didit_btn_border_radius', 8);
-    $pv = (int) get_option('didit_btn_padding_v', 12);
-    $ph = (int) get_option('didit_btn_padding_h', 24);
-    $fs = (int) get_option('didit_btn_font_size', 16);
-
-    $css = ".didit-verify-btn{background:{$bg};color:{$tc};border:none;border-radius:{$rad}px;padding:{$pv}px {$ph}px;font-size:{$fs}px;font-weight:600;font-family:inherit;cursor:pointer;line-height:1.4;transition:opacity .2s,box-shadow .2s;}"
-      . ".didit-verify-btn:hover{opacity:.9;box-shadow:0 4px 12px rgba(0,0,0,.2);}"
-      . ".didit-verify-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}"
-      . ".didit-verify-btn.didit-verified{background:#41D97F;opacity:1;}"
-      . ".didit-verify-btn.didit-in-review{background:#F59E0B;opacity:1;}"
-      . ".didit-verify-btn.didit-declined{background:{$bg};}";
-
-    wp_add_inline_style('didit-verify', $css);
   }
 
   private function page_needs_sdk()

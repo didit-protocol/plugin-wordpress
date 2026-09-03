@@ -26,6 +26,16 @@ function ok($condition, $label)
 $plugin = Didit_Verify::init();
 
 ok(empty($GLOBALS['didit_test_enqueued_scripts']), 'plugin load does not enqueue frontend scripts by itself');
+ok(empty($GLOBALS['didit_test_enqueued_styles']), 'plugin load does not enqueue frontend styles by itself');
+
+$plugin->enqueue_scripts();
+
+ok(isset($GLOBALS['didit_test_enqueued_styles']['didit-verify']), 'frontend enqueue prints shortcode stylesheet before header closes');
+ok(!empty($GLOBALS['didit_test_inline_styles']['didit-verify']), 'frontend enqueue prints button appearance CSS before header closes');
+ok(empty($GLOBALS['didit_test_enqueued_scripts']), 'frontend enqueue without detected shortcode does not enqueue SDK scripts');
+
+$style_count = count($GLOBALS['didit_test_enqueued_styles']);
+$inline_style_count = count($GLOBALS['didit_test_inline_styles']['didit-verify']);
 
 $html = $plugin->render_shortcode([]);
 
@@ -35,9 +45,10 @@ ok(isset($GLOBALS['didit_test_enqueued_scripts']['didit-sdk']), 'shortcode rende
 ok(isset($GLOBALS['didit_test_enqueued_scripts']['didit-verify']), 'shortcode render enqueues frontend integration script');
 ok(isset($GLOBALS['didit_test_localized_scripts']['didit-verify']['diditConfig']), 'shortcode render localizes frontend config');
 ok(!empty($GLOBALS['didit_test_inline_styles']['didit-verify']), 'shortcode render adds button appearance CSS');
+ok($style_count === count($GLOBALS['didit_test_enqueued_styles']), 'late shortcode render reuses the header stylesheet');
+ok($inline_style_count === count($GLOBALS['didit_test_inline_styles']['didit-verify']), 'late shortcode render reuses header button appearance CSS');
 
 $script_count = count($GLOBALS['didit_test_enqueued_scripts']);
-$inline_style_count = count($GLOBALS['didit_test_inline_styles']['didit-verify']);
 $plugin->render_shortcode(['mode' => 'embedded']);
 
 ok($script_count === count($GLOBALS['didit_test_enqueued_scripts']), 'repeated shortcode render keeps script enqueue one-shot');
