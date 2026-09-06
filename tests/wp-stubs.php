@@ -22,6 +22,10 @@ $GLOBALS['didit_test_user_meta'] = [];
 $GLOBALS['didit_test_users'] = [];
 // Actions fired by the handler.
 $GLOBALS['didit_test_actions'] = [];
+$GLOBALS['didit_test_enqueued_styles'] = [];
+$GLOBALS['didit_test_enqueued_scripts'] = [];
+$GLOBALS['didit_test_localized_scripts'] = [];
+$GLOBALS['didit_test_inline_styles'] = [];
 
 function add_action() {}
 function add_filter() {}
@@ -31,9 +35,32 @@ function plugin_basename($file) { return basename($file); }
 function load_plugin_textdomain() {}
 function __($text) { return $text; }
 function esc_html__($text) { return $text; }
+function esc_html($text) { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
+function esc_attr($text) { return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8'); }
+function esc_url_raw($url) { return (string) $url; }
 function absint($value) { return abs((int) $value); }
 function sanitize_text_field($value) { return trim(strip_tags((string) $value)); }
 function current_time() { return '2026-03-31 12:00:00'; }
+function shortcode_atts($pairs, $atts) { return array_merge($pairs, (array) $atts); }
+function apply_filters($hook, $value) { return $value; }
+function rest_url($path = '') { return 'https://example.test/wp-json/' . ltrim($path, '/'); }
+function wp_create_nonce($action) { return 'test-nonce-' . $action; }
+
+function wp_enqueue_style($handle, $src = '', $deps = [], $ver = false) {
+  $GLOBALS['didit_test_enqueued_styles'][$handle] = compact('src', 'deps', 'ver');
+}
+
+function wp_enqueue_script($handle, $src = '', $deps = [], $ver = false, $in_footer = false) {
+  $GLOBALS['didit_test_enqueued_scripts'][$handle] = compact('src', 'deps', 'ver', 'in_footer');
+}
+
+function wp_localize_script($handle, $object_name, $l10n) {
+  $GLOBALS['didit_test_localized_scripts'][$handle][$object_name] = $l10n;
+}
+
+function wp_add_inline_style($handle, $data) {
+  $GLOBALS['didit_test_inline_styles'][$handle][] = $data;
+}
 
 function get_option($name, $default = false) {
   return array_key_exists($name, $GLOBALS['didit_test_options'])
