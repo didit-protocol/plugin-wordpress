@@ -204,6 +204,7 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 == Changelog ==
 
 = 0.3.1 =
+* Page builders that render shortcode content outside the post content (for example Oxygen) no longer show an unstyled verification button or embedded container. The plugin stylesheet and the button appearance CSS are now always queued in the header, while the SDK script is still enqueued when the shortcode itself renders.
 * Webhook receiver now verifies `X-Signature-V2` first, falls back to the legacy `X-Signature`, and finally to `X-Signature-Simple`. A delivery is accepted as soon as one variant verifies, so a reverse proxy, CDN rule or security plugin that strips a single `X-*` header no longer causes a 401 "Missing or stale webhook signature".
 * Middleware that re-encodes the request body (Unicode escaping, slash escaping, key reordering) no longer breaks verification: `X-Signature-V2` is computed over the canonical JSON form rather than the raw bytes.
 * Freshness is now checked against the signed `timestamp` inside the payload, which also rejects a replayed delivery re-sent with a refreshed `X-Timestamp` header.
