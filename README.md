@@ -451,10 +451,12 @@ docker compose exec wordpress wp plugin install woocommerce --activate --allow-r
 
 ## Tests
 
-Webhook signature verification is covered by a dependency-free PHP test suite:
+Webhook signature verification, the browser completion callback and shortcode asset loading are covered by dependency-free PHP test suites:
 
 ```bash
 php tests/test-webhook-signature.php
+php tests/test-verify-endpoint.php
+php tests/test-shortcode-assets.php
 # or, without a local PHP:
 docker run --rm -v "$PWD":/app -w /app php:8.2-cli php tests/test-webhook-signature.php
 ```

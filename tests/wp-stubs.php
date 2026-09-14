@@ -26,6 +26,11 @@ $GLOBALS['didit_test_enqueued_styles'] = [];
 $GLOBALS['didit_test_enqueued_scripts'] = [];
 $GLOBALS['didit_test_localized_scripts'] = [];
 $GLOBALS['didit_test_inline_styles'] = [];
+// The logged-in user rest_save_verification() acts for (0 = anonymous).
+$GLOBALS['didit_test_current_user_id'] = 0;
+// Queued wp_remote_get() responses (FIFO) and the requests that consumed them.
+$GLOBALS['didit_test_http_responses'] = [];
+$GLOBALS['didit_test_http_requests'] = [];
 
 function add_action() {}
 function add_filter() {}
@@ -80,6 +85,31 @@ function get_users($args) {
   return array_slice($matches, 0, isset($args['number']) ? (int) $args['number'] : count($matches));
 }
 
+function is_user_logged_in() { return $GLOBALS['didit_test_current_user_id'] > 0; }
+function get_current_user_id() { return (int) $GLOBALS['didit_test_current_user_id']; }
+function do_shortcode($content) { return (string) $content; }
+function wp_json_encode($data) { return json_encode($data); }
+function is_wp_error($thing) { return $thing instanceof WP_Error; }
+
+function get_user_meta($user_id, $key, $single = false) {
+  $stored = $GLOBALS['didit_test_user_meta'][$user_id . '|' . $key] ?? '';
+  return $single ? $stored : [$stored];
+}
+
+function wp_remote_get($url, $args = []) {
+  $GLOBALS['didit_test_http_requests'][] = ['url' => $url, 'args' => $args];
+  $response = array_shift($GLOBALS['didit_test_http_responses']);
+  return null === $response ? new WP_Error('http_request_failed', 'no queued response') : $response;
+}
+
+function wp_remote_retrieve_response_code($response) {
+  return is_array($response) ? ($response['response']['code'] ?? 0) : 0;
+}
+
+function wp_remote_retrieve_body($response) {
+  return is_array($response) ? ($response['body'] ?? '') : '';
+}
+
 function get_userdata($user_id) {
   return isset($GLOBALS['didit_test_users'][$user_id]) ? (object) ['ID' => $user_id] : false;
 }
@@ -128,6 +158,8 @@ class Didit_Test_Request {
   }
 
   public function get_body() { return $this->body; }
+
+  public function get_json_params() { return json_decode($this->body, true); }
 
   public function get_header($name) {
     $name = strtolower(str_replace('-', '_', $name));

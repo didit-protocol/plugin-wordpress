@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.1
+ * Version:     0.3.2
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,9 +18,10 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.1');
+define('DIDIT_VERIFY_VERSION', '0.3.2');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
+define('DIDIT_DECISION_URL', 'https://verification.didit.me/v3/session/%s/decision/');
 
 final class Didit_Verify
 {
@@ -1002,6 +1003,17 @@ final class Didit_Verify
     return rest_ensure_response(['url' => $url]);
   }
 
+  /**
+   * Browser completion callback: `POST /didit/v1/verify`.
+   *
+   * The SDK posts this from the visitor's browser when the flow closes, so the
+   * whole body is caller-controlled. The `status` it carries is therefore never
+   * stored: the verified state that [didit_gate] and the WooCommerce order hold
+   * are keyed on is read back from Didit's own decision endpoint, and only for
+   * a session that was created for this user or this order. The signed webhook
+   * remains the authoritative source; this path just lets the site reflect the
+   * result immediately without trusting the client for it.
+   */
   public function rest_save_verification($request)
   {
     $user_id = get_current_user_id();
@@ -1014,10 +1026,29 @@ final class Didit_Verify
 
     $type = sanitize_text_field($input['type'] ?? '');
     $session_id = sanitize_text_field($input['sessionId'] ?? '');
-    $status = sanitize_text_field($input['status'] ?? '');
 
     if ('completed' === $type) {
+      if (!$session_id || !preg_match('/^[A-Za-z0-9-]{1,64}$/', $session_id)) {
+        return new WP_Error('invalid_session', __('Invalid session id.', 'didit-verify'), ['status' => 400]);
+      }
+
+      $decision = $this->fetch_session_decision($session_id);
+      if (!$decision) {
+        return new WP_Error(
+          'decision_unavailable',
+          __('Could not confirm the verification result with Didit. It will be applied when the webhook arrives.', 'didit-verify'),
+          ['status' => 502]
+        );
+      }
+
+      // Authoritative: what Didit says about this session, not what the browser said.
+      $status = sanitize_text_field($decision['status']);
+
       if ($user_id) {
+        if (!$this->decision_belongs_to_user($decision, $user_id)) {
+          return new WP_Error('session_mismatch', __('This verification session does not belong to you.', 'didit-verify'), ['status' => 403]);
+        }
+
         update_user_meta($user_id, '_didit_session_id', $session_id);
         update_user_meta($user_id, '_didit_status', $status);
         update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
@@ -1029,7 +1060,7 @@ final class Didit_Verify
         }
       }
 
-      if ($order && $session_id && hash_equals((string) $order->get_meta('_didit_session_id'), $session_id)) {
+      if ($order && hash_equals((string) $order->get_meta('_didit_session_id'), $session_id)) {
         $this->wc_apply_verification_to_order($order, $status, 'browser');
       }
 
@@ -1039,6 +1070,54 @@ final class Didit_Verify
     }
 
     return rest_ensure_response(['saved' => true]);
+  }
+
+  /**
+   * Read a session's decision from Didit with the site API key.
+   *
+   * @return array|null Decoded decision with a non-empty `status`, or null when
+   *                    the session is unknown, the key is missing or the call failed.
+   */
+  private function fetch_session_decision($session_id)
+  {
+    $api_key = get_option('didit_api_key');
+    if (empty($api_key)) {
+      return null;
+    }
+
+    $response = wp_remote_get(sprintf(DIDIT_DECISION_URL, rawurlencode($session_id)), [
+      'headers' => ['x-api-key' => $api_key],
+      'timeout' => 15,
+    ]);
+    if (is_wp_error($response) || 200 !== (int) wp_remote_retrieve_response_code($response)) {
+      return null;
+    }
+
+    $decision = json_decode(wp_remote_retrieve_body($response), true);
+    if (!is_array($decision) || empty($decision['status']) || !is_string($decision['status'])) {
+      return null;
+    }
+    return $decision;
+  }
+
+  /**
+   * Whether a decision is for a session this site created for the given user.
+   *
+   * rest_create_session() stamps `metadata.wp_user_id` (which the caller cannot
+   * override) and, in the default vendor-data mode, `vendor_data = wp-{id}`;
+   * either one ties the session to the user. `metadata` is sent JSON-encoded at
+   * creation, so it is accepted back as an object or as that string.
+   */
+  private function decision_belongs_to_user(array $decision, $user_id)
+  {
+    $meta = $decision['metadata'] ?? null;
+    if (is_string($meta)) {
+      $meta = json_decode($meta, true);
+    }
+    if (is_array($meta) && absint($meta['wp_user_id'] ?? 0) === absint($user_id)) {
+      return true;
+    }
+    return ('wp-' . absint($user_id)) === (string) ($decision['vendor_data'] ?? '');
   }
 
   /**

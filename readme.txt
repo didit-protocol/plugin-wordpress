@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 0.3.1
+Stable tag: 0.3.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -202,6 +202,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 4. WooCommerce checkout with verification step.
 
 == Changelog ==
+
+= 0.3.2 =
+* Security: the browser completion callback (`POST /didit/v1/verify`) no longer trusts the `status` sent by the client. The plugin now reads the session decision from Didit with the site API key and only applies it when the session was created for the calling user (or the order being verified). Previously any logged-in user could mark their own account as verified, unlocking `[didit_gate]` content, by posting a forged completion.
 
 = 0.3.1 =
 * Page builders that render shortcode content outside the post content (for example Oxygen) no longer show an unstyled verification button or embedded container. The plugin stylesheet and the button appearance CSS are now always queued in the header, while the SDK script is still enqueued when the shortcode itself renders.
