@@ -76,12 +76,38 @@ function get_option($name, $default = false) {
     : $default;
 }
 
+/**
+ * Matches users in $GLOBALS['didit_test_users'] on their stored meta, supporting
+ * the `meta_key`/`meta_value` pair and a `meta_query` with an AND/OR relation.
+ * A user's entry value doubles as a `_didit_session_id` when no meta was written.
+ */
 function get_users($args) {
+  $clauses = [];
+  if (isset($args['meta_key'], $args['meta_value'])) {
+    $clauses[] = ['key' => $args['meta_key'], 'value' => $args['meta_value']];
+  }
+  $relation = 'AND';
+  foreach ((array) ($args['meta_query'] ?? []) as $name => $clause) {
+    if ('relation' === $name) {
+      $relation = strtoupper((string) $clause);
+      continue;
+    }
+    $clauses[] = $clause;
+  }
+
   $matches = [];
   foreach ($GLOBALS['didit_test_users'] as $id => $session_id) {
-    if (isset($args['meta_key'], $args['meta_value'])
-      && '_didit_session_id' === $args['meta_key']
-      && $session_id === $args['meta_value']) {
+    $hits = 0;
+    foreach ($clauses as $clause) {
+      $values = array_map('strval', get_user_meta($id, $clause['key'], false));
+      if ('_didit_session_id' === $clause['key'] && !$values && '' !== (string) $session_id) {
+        $values = [(string) $session_id];
+      }
+      if (in_array((string) $clause['value'], $values, true)) {
+        $hits++;
+      }
+    }
+    if ($clauses && ('OR' === $relation ? $hits > 0 : $hits === count($clauses))) {
       $matches[] = $id;
     }
   }
@@ -94,9 +120,25 @@ function do_shortcode($content) { return (string) $content; }
 function wp_json_encode($data) { return json_encode($data); }
 function is_wp_error($thing) { return $thing instanceof WP_Error; }
 
+// Meta values are stored as a scalar (single) or a list (multi-value, via add_user_meta()).
 function get_user_meta($user_id, $key, $single = false) {
-  $stored = $GLOBALS['didit_test_user_meta'][$user_id . '|' . $key] ?? '';
-  return $single ? $stored : [$stored];
+  $slot = $user_id . '|' . $key;
+  if (!array_key_exists($slot, $GLOBALS['didit_test_user_meta'])) {
+    return $single ? '' : [];
+  }
+  $stored = $GLOBALS['didit_test_user_meta'][$slot];
+  $values = is_array($stored) ? array_values($stored) : [$stored];
+  return $single ? ($values[0] ?? '') : $values;
+}
+
+function add_user_meta($user_id, $key, $value, $unique = false) {
+  $values = get_user_meta($user_id, $key, false);
+  if ($unique && $values) {
+    return false;
+  }
+  $values[] = $value;
+  $GLOBALS['didit_test_user_meta'][$user_id . '|' . $key] = $values;
+  return count($values);
 }
 
 function wp_remote_get($url, $args = []) {
@@ -135,8 +177,21 @@ function update_user_meta($user_id, $key, $value) {
   $GLOBALS['didit_test_user_meta'][$user_id . '|' . $key] = $value;
 }
 
-function delete_user_meta($user_id, $key) {
-  unset($GLOBALS['didit_test_user_meta'][$user_id . '|' . $key]);
+function delete_user_meta($user_id, $key, $value = '') {
+  $slot = $user_id . '|' . $key;
+  if ('' === $value) {
+    unset($GLOBALS['didit_test_user_meta'][$slot]);
+    return true;
+  }
+  $remaining = array_values(array_filter(get_user_meta($user_id, $key, false), function ($stored) use ($value) {
+    return (string) $stored !== (string) $value;
+  }));
+  if ($remaining) {
+    $GLOBALS['didit_test_user_meta'][$slot] = $remaining;
+  } else {
+    unset($GLOBALS['didit_test_user_meta'][$slot]);
+  }
+  return true;
 }
 
 function do_action($hook) {

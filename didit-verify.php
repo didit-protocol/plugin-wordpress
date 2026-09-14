@@ -25,6 +25,10 @@ define('DIDIT_DECISION_URL', 'https://verification.didit.me/v3/session/%s/decisi
 
 final class Didit_Verify
 {
+  /** Multi-value user meta: sessions created for the user whose decision is still pending. */
+  const PENDING_SESSION_META = '_didit_pending_session_id';
+  /** Oldest pending bindings are dropped beyond this many per user. */
+  const PENDING_SESSION_LIMIT = 10;
 
   private $block_session_id = '';
   private $sdk_styles_enqueued = false;
@@ -989,8 +993,11 @@ final class Didit_Verify
     if ($created_session_id && is_user_logged_in()) {
       // Trusted session -> user binding, recorded server-side so the completion
       // callback and a simple-signature webhook can both resolve the user without
-      // relying on the browser callback having succeeded first.
-      update_user_meta(get_current_user_id(), '_didit_session_id', $created_session_id);
+      // relying on the browser callback having succeeded first. It is kept apart
+      // from `_didit_session_id`, which stays on the session whose decision the
+      // user's current status came from, so starting a new session cannot detach
+      // the user from a decision that is later revoked.
+      $this->bind_pending_session(get_current_user_id(), $created_session_id);
     }
 
     if ($order) {
@@ -1075,15 +1082,7 @@ final class Didit_Verify
       }
 
       if ($user_owns) {
-        update_user_meta($user_id, '_didit_session_id', $session_id);
-        update_user_meta($user_id, '_didit_status', $status);
-        update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
-
-        if ('Approved' === $status) {
-          update_user_meta($user_id, '_didit_verified', 1);
-        } else {
-          delete_user_meta($user_id, '_didit_verified');
-        }
+        $this->apply_decision_to_user($user_id, $session_id, $status);
       }
 
       if ($order_matches) {
@@ -1131,15 +1130,15 @@ final class Didit_Verify
   /**
    * Whether a session was created by this site for the given user.
    *
-   * rest_create_session() records the session id in the user's meta and stamps
-   * `metadata.wp_user_id` (which the caller cannot override) and, in the default
-   * vendor-data mode, `vendor_data = wp-{id}`; any one of them ties the session to
-   * the user. `metadata` is sent JSON-encoded at creation, so it is accepted back
-   * as an object or as that string.
+   * rest_create_session() records the session id in the user's meta (see
+   * session_bound_to_user()) and stamps `metadata.wp_user_id` (which the caller
+   * cannot override) and, in the default vendor-data mode, `vendor_data = wp-{id}`;
+   * any one of them ties the session to the user. `metadata` is sent JSON-encoded
+   * at creation, so it is accepted back as an object or as that string.
    */
   private function session_belongs_to_user(array $decision, $session_id, $user_id)
   {
-    if (hash_equals((string) get_user_meta($user_id, '_didit_session_id', true), (string) $session_id)) {
+    if ($this->session_bound_to_user($user_id, $session_id)) {
       return true;
     }
     $meta = $decision['metadata'] ?? null;
@@ -1150,6 +1149,67 @@ final class Didit_Verify
       return true;
     }
     return ('wp-' . absint($user_id)) === (string) ($decision['vendor_data'] ?? '');
+  }
+
+  /**
+   * Record a session this site just created for a user, without touching the
+   * session that currently backs the user's stored status.
+   *
+   * Two bindings exist per user: `_didit_session_id` names the session whose
+   * decision `_didit_status` / `_didit_verified` came from, and the multi-value
+   * `_didit_pending_session_id` lists sessions created since whose decision has not
+   * been applied yet. A webhook or callback for either one is accepted, so a later
+   * session cannot hide the revocation of the one that granted access, and a
+   * decision for the new session still finds the user. Pending bindings are capped
+   * so a user who keeps starting sessions does not grow the list without bound.
+   */
+  private function bind_pending_session($user_id, $session_id)
+  {
+    $pending = array_map('strval', (array) get_user_meta($user_id, self::PENDING_SESSION_META, false));
+    if (in_array((string) $session_id, $pending, true)) {
+      return;
+    }
+    add_user_meta($user_id, self::PENDING_SESSION_META, $session_id, false);
+
+    $excess = count($pending) + 1 - self::PENDING_SESSION_LIMIT;
+    for ($i = 0; $i < $excess; $i++) {
+      // get_user_meta() returns values in insertion order: drop the oldest first.
+      delete_user_meta($user_id, self::PENDING_SESSION_META, $pending[$i]);
+    }
+  }
+
+  /**
+   * Whether this site recorded the session for the user at creation or on a
+   * decision: the granting session or any pending one.
+   */
+  private function session_bound_to_user($user_id, $session_id)
+  {
+    if (hash_equals((string) get_user_meta($user_id, '_didit_session_id', true), (string) $session_id)) {
+      return true;
+    }
+    foreach ((array) get_user_meta($user_id, self::PENDING_SESSION_META, false) as $pending) {
+      if (hash_equals((string) $pending, (string) $session_id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Store an authoritative decision for a session bound to the user. The session
+   * becomes the one the user's status is keyed on and leaves the pending list.
+   */
+  private function apply_decision_to_user($user_id, $session_id, $status)
+  {
+    update_user_meta($user_id, '_didit_session_id', $session_id);
+    update_user_meta($user_id, '_didit_status', $status);
+    update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
+    if ('Approved' === $status) {
+      update_user_meta($user_id, '_didit_verified', 1);
+    } else {
+      delete_user_meta($user_id, '_didit_verified');
+    }
+    delete_user_meta($user_id, self::PENDING_SESSION_META, $session_id);
   }
 
   /**
@@ -1282,9 +1342,10 @@ final class Didit_Verify
   /**
    * Resolve the WordPress user a session belongs to from stored state.
    *
-   * The session id is written to user meta when the verification is saved, so this
-   * mapping is local and trustworthy - unlike the payload's `metadata.wp_user_id` and
-   * `vendor_data`, which X-Signature-Simple does not authenticate.
+   * The session id is written to user meta when the session is created and again
+   * when a decision is saved, so this mapping is local and trustworthy - unlike the
+   * payload's `metadata.wp_user_id` and `vendor_data`, which X-Signature-Simple does
+   * not authenticate. Both the granting session and pending sessions resolve.
    */
   private function user_id_for_session($session_id)
   {
@@ -1293,8 +1354,11 @@ final class Didit_Verify
     }
 
     $users = get_users([
-      'meta_key' => '_didit_session_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-      'meta_value' => $session_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+      'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+        'relation' => 'OR',
+        ['key' => '_didit_session_id', 'value' => $session_id],
+        ['key' => self::PENDING_SESSION_META, 'value' => $session_id],
+      ],
       'number' => 1,
       'fields' => 'ID',
     ]);
@@ -1383,14 +1447,7 @@ final class Didit_Verify
       $wp_user_id = $this->user_id_for_session($session_id);
     }
     if ($wp_user_id && get_userdata($wp_user_id)) {
-      update_user_meta($wp_user_id, '_didit_session_id', $session_id);
-      update_user_meta($wp_user_id, '_didit_status', $status);
-      update_user_meta($wp_user_id, '_didit_verified_at', current_time('mysql'));
-      if ('Approved' === $status) {
-        update_user_meta($wp_user_id, '_didit_verified', 1);
-      } else {
-        delete_user_meta($wp_user_id, '_didit_verified');
-      }
+      $this->apply_decision_to_user($wp_user_id, $session_id, $status);
     }
 
     if (in_array($status, ['Approved', 'Declined'], true)) {

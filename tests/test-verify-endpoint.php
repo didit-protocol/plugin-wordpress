@@ -209,9 +209,9 @@ $GLOBALS['didit_test_http_responses'][] = [
 ];
 $result = $plugin->rest_create_session(new Didit_Test_Request('{}'));
 ok(is_array($result) && 'https://verify.didit.me/session/abc' === ($result['url'] ?? null), 'the session is created');
-ok('00000000-0000-4000-8000-000000000010' === user_meta($USER, '_didit_session_id'),
-  'the session id is bound to the user server-side, before any browser callback');
-$GLOBALS['didit_test_users'] = [$USER => user_meta($USER, '_didit_session_id')];
+ok(['00000000-0000-4000-8000-000000000010'] === get_user_meta($USER, Didit_Verify::PENDING_SESSION_META, false),
+  'the session id is bound to the user server-side as pending, before any browser callback');
+ok(null === user_meta($USER, '_didit_session_id'), 'no decision has been stored yet');
 $GLOBALS['didit_test_options']['didit_webhook_secret'] = 'whsec';
 $ts = time();
 $status_payload = json_encode([
@@ -226,6 +226,9 @@ $result = $plugin->rest_webhook(new Didit_Test_Request($status_payload, ['X-Sign
 $GLOBALS['didit_test_options']['didit_webhook_secret'] = '';
 ok(is_array($result) && !empty($result['received']), 'a simple-signature webhook for that session is accepted');
 ok('Approved' === user_meta($USER, '_didit_status'), 'the webhook resolves the user from the creation-time binding without a browser callback');
+ok('00000000-0000-4000-8000-000000000010' === user_meta($USER, '_didit_session_id')
+  && [] === get_user_meta($USER, Didit_Verify::PENDING_SESSION_META, false),
+  'the decided session becomes the granting session and leaves the pending list');
 
 echo "\nDecision without metadata, session bound at creation\n";
 reset_state($USER);
@@ -233,6 +236,80 @@ $GLOBALS['didit_test_user_meta'][$USER . '|_didit_session_id'] = '00000000-0000-
 queue_decision(['session_id' => '00000000-0000-4000-8000-000000000011', 'status' => 'In Review', 'vendor_data' => 'custom-7']);
 $result = $plugin->rest_save_verification(completion_request('00000000-0000-4000-8000-000000000011', 'Approved'));
 ok(!($result instanceof WP_Error) && 'In Review' === user_meta($USER, '_didit_status'), 'the stored binding alone authorizes the user update');
+
+
+function simple_webhook($plugin, $session_id, $status)
+{
+  $ts = time();
+  $payload = json_encode([
+    'timestamp' => $ts,
+    'session_id' => $session_id,
+    'status' => $status,
+    'webhook_type' => 'status.updated',
+  ]);
+  $simple = hash_hmac('sha256', "{$ts}:{$session_id}:{$status}:status.updated", 'whsec');
+  $GLOBALS['didit_test_options']['didit_webhook_secret'] = 'whsec';
+  $result = $plugin->rest_webhook(new Didit_Test_Request($payload, ['X-Signature-Simple' => $simple]));
+  $GLOBALS['didit_test_options']['didit_webhook_secret'] = '';
+  return $result;
+}
+
+function create_session($plugin, $session_id)
+{
+  $GLOBALS['didit_test_http_responses'][] = [
+    'response' => ['code' => 201],
+    'body' => json_encode(['session_id' => $session_id, 'url' => 'https://verify.didit.me/session/' . $session_id]),
+  ];
+  return $plugin->rest_create_session(new Didit_Test_Request('{}'));
+}
+
+echo "\nStarting another session keeps the approved session revocable\n";
+reset_state($USER);
+$GLOBALS['didit_test_options']['didit_wc_mode'] = 'off';
+$A = '00000000-0000-4000-8000-00000000000a';
+$B = '00000000-0000-4000-8000-00000000000b';
+queue_decision(['session_id' => $A, 'status' => 'Approved', 'vendor_data' => 'wp-7', 'metadata' => ['wp_user_id' => 7]]);
+$result = $plugin->rest_save_verification(completion_request($A, 'Approved'));
+ok(!($result instanceof WP_Error) && 1 === user_meta($USER, '_didit_verified'), 'session A is approved for the user');
+$result = create_session($plugin, $B);
+ok(is_array($result) && isset($result['url']), 'the user starts a second session B');
+ok($A === user_meta($USER, '_didit_session_id'), 'the granting session A stays bound to the user');
+ok(['00000000-0000-4000-8000-00000000000b'] === get_user_meta($USER, Didit_Verify::PENDING_SESSION_META, false), 'B is recorded as pending');
+ok('Approved' === user_meta($USER, '_didit_status') && false !== strpos($plugin->render_gate_shortcode([], 'SECRET'), 'SECRET'),
+  'starting B does not change the stored decision');
+$result = simple_webhook($plugin, $A, 'Declined');
+ok(is_array($result) && !empty($result['received']), 'a simple-signature Declined webhook for A is accepted');
+ok('Declined' === user_meta($USER, '_didit_status') && null === user_meta($USER, '_didit_verified'),
+  'the decline of A revokes the user even though B was started afterwards');
+ok(false === strpos($plugin->render_gate_shortcode([], 'SECRET'), 'SECRET'), '[didit_gate] locks again');
+ok([$B] === get_user_meta($USER, Didit_Verify::PENDING_SESSION_META, false), 'B is still pending');
+
+echo "\nThe pending session is usable by the callback and the webhook\n";
+$GLOBALS['didit_test_http_requests'] = [];
+queue_decision(['session_id' => $B, 'status' => 'In Review', 'vendor_data' => 'custom-7']);
+$result = $plugin->rest_save_verification(completion_request($B, 'Approved'));
+ok(!($result instanceof WP_Error) && 'In Review' === user_meta($USER, '_didit_status'),
+  'the pending binding alone authorizes the callback for B, with the status Didit reports');
+ok($B === user_meta($USER, '_didit_session_id') && [] === get_user_meta($USER, Didit_Verify::PENDING_SESSION_META, false),
+  'B becomes the granting session and leaves the pending list');
+$result = simple_webhook($plugin, $B, 'Approved');
+ok(is_array($result) && !empty($result['received']) && 1 === user_meta($USER, '_didit_verified'),
+  'the simple-signature webhook for B still resolves the user after the callback');
+$result = simple_webhook($plugin, $A, 'Approved');
+ok(is_array($result) && !empty($result['received']) && $B === user_meta($USER, '_didit_session_id'),
+  'a late webhook for the superseded session A no longer resolves the user');
+
+echo "\nPending bindings are capped per user\n";
+reset_state($USER);
+for ($i = 1; $i <= Didit_Verify::PENDING_SESSION_LIMIT + 2; $i++) {
+  create_session($plugin, sprintf('00000000-0000-4000-8000-0000000000%02d', $i));
+}
+create_session($plugin, sprintf('00000000-0000-4000-8000-0000000000%02d', Didit_Verify::PENDING_SESSION_LIMIT + 2));
+$pending = get_user_meta($USER, Didit_Verify::PENDING_SESSION_META, false);
+ok(Didit_Verify::PENDING_SESSION_LIMIT === count($pending), 'at most ' . Didit_Verify::PENDING_SESSION_LIMIT . ' pending sessions are kept');
+ok('00000000-0000-4000-8000-000000000003' === $pending[0]
+  && sprintf('00000000-0000-4000-8000-0000000000%02d', Didit_Verify::PENDING_SESSION_LIMIT + 2) === end($pending),
+  'the oldest pending sessions are dropped first and a repeated session id is not duplicated');
 
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed > 0 ? 1 : 0);

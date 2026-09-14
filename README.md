@@ -316,7 +316,8 @@ User clicks button
 → PHP checks: nonce ✓ → login ✓ → rate limit ✓
 → PHP calls Didit API with API key (server-side) → returns { url }
 → JS calls DiditSdk.startVerification({ url }) → modal opens
-→ PHP stores the session id on the user (trusted session → user binding)
+→ PHP records the session id on the user as pending (trusted session → user binding);
+  the session behind the user's current status stays bound until a new decision lands
 → User completes → onComplete fires
 → JS sends POST /wp-json/didit/v1/verify { sessionId }
 → PHP reads GET /v3/session/{id}/decision/ with the API key, checks the session
@@ -397,7 +398,8 @@ When a user completes verification, the plugin saves these fields to WordPress u
 | Meta key | Value | Description |
 |----------|-------|-------------|
 | `_didit_verified` | `1` | User is verified |
-| `_didit_session_id` | UUID | Didit session ID |
+| `_didit_session_id` | UUID | Didit session the stored status came from |
+| `_didit_pending_session_id` | UUID (multi-value) | Sessions created since, still waiting for a decision |
 | `_didit_status` | `Approved` / `Pending` / `Declined` | Verification result |
 | `_didit_verified_at` | datetime | When verification was completed |
 
