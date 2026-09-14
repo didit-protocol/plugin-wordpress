@@ -193,6 +193,7 @@ final class Didit_Verify
       selected($v, 'api', false),
       esc_html__('API Session — recommended for production', 'didit-verify'),
       esc_html__('UniLink uses a fixed URL. API mode creates a unique session per user (requires Workflow ID + API Key).', 'didit-verify')
+      . ' ' . esc_html__('UniLink results cannot be confirmed by this site, so [didit_gate], [didit_status] and WooCommerce order verification require API mode.', 'didit-verify')
     );
   }
 
@@ -984,8 +985,16 @@ final class Didit_Verify
       return new WP_Error('api_error', __('No verification URL returned.', 'didit-verify'), ['status' => 500]);
     }
 
+    $created_session_id = sanitize_text_field($data['session_id'] ?? '');
+    if ($created_session_id && is_user_logged_in()) {
+      // Trusted session -> user binding, recorded server-side so the completion
+      // callback and a simple-signature webhook can both resolve the user without
+      // relying on the browser callback having succeeded first.
+      update_user_meta(get_current_user_id(), '_didit_session_id', $created_session_id);
+    }
+
     if ($order) {
-      $order->update_meta_data('_didit_session_id', sanitize_text_field($data['session_id'] ?? ''));
+      $order->update_meta_data('_didit_session_id', $created_session_id);
       $order->update_meta_data('_didit_session_url', esc_url_raw($url));
       if (!$order->get_meta('_didit_status')) {
         $order->update_meta_data('_didit_status', 'Not Started');
@@ -993,7 +1002,7 @@ final class Didit_Verify
       $order->add_order_note(sprintf(
         /* translators: %s: Didit session id. */
         __('Didit: verification session created (%s).', 'didit-verify'),
-        sanitize_text_field($data['session_id'] ?? '')
+        $created_session_id
       ));
       $order->save();
     }
@@ -1032,6 +1041,17 @@ final class Didit_Verify
         return new WP_Error('invalid_session', __('Invalid session id.', 'didit-verify'), ['status' => 400]);
       }
 
+      // A UniLink session is started from a shared URL, so nothing on this site
+      // ties it to the visitor and its result cannot be stored without trusting
+      // the browser. Say so instead of failing later with a misleading error.
+      if ('api' !== get_option('didit_mode', 'unilink')) {
+        return new WP_Error(
+          'unilink_not_verifiable',
+          __('This site uses UniLink mode, which cannot confirm verification results. Switch Didit Verify to API Session mode to save them.', 'didit-verify'),
+          ['status' => 409]
+        );
+      }
+
       $decision = $this->fetch_session_decision($session_id);
       if (!$decision) {
         return new WP_Error(
@@ -1044,11 +1064,17 @@ final class Didit_Verify
       // Authoritative: what Didit says about this session, not what the browser said.
       $status = sanitize_text_field($decision['status']);
 
-      if ($user_id) {
-        if (!$this->decision_belongs_to_user($decision, $user_id)) {
-          return new WP_Error('session_mismatch', __('This verification session does not belong to you.', 'didit-verify'), ['status' => 403]);
-        }
+      // The user and the order are authorized independently: a session started
+      // as a guest for an order still belongs to that order after the customer
+      // logs in, but it must not change that logged-in user's own status.
+      $user_owns = $user_id && $this->session_belongs_to_user($decision, $session_id, $user_id);
+      $order_matches = $order && hash_equals((string) $order->get_meta('_didit_session_id'), $session_id);
 
+      if (!$user_owns && !$order_matches) {
+        return new WP_Error('session_mismatch', __('This verification session does not belong to you.', 'didit-verify'), ['status' => 403]);
+      }
+
+      if ($user_owns) {
         update_user_meta($user_id, '_didit_session_id', $session_id);
         update_user_meta($user_id, '_didit_status', $status);
         update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
@@ -1060,11 +1086,13 @@ final class Didit_Verify
         }
       }
 
-      if ($order && hash_equals((string) $order->get_meta('_didit_session_id'), $session_id)) {
+      if ($order_matches) {
         $this->wc_apply_verification_to_order($order, $status, 'browser');
       }
 
-      do_action('didit_verification_completed', $user_id, $session_id, $status);
+      do_action('didit_verification_completed', $user_owns ? $user_id : 0, $session_id, $status);
+
+      return rest_ensure_response(['saved' => true, 'status' => $status]);
     } elseif ('cancelled' === $type) {
       do_action('didit_verification_cancelled', $user_id, $session_id);
     }
@@ -1101,15 +1129,19 @@ final class Didit_Verify
   }
 
   /**
-   * Whether a decision is for a session this site created for the given user.
+   * Whether a session was created by this site for the given user.
    *
-   * rest_create_session() stamps `metadata.wp_user_id` (which the caller cannot
-   * override) and, in the default vendor-data mode, `vendor_data = wp-{id}`;
-   * either one ties the session to the user. `metadata` is sent JSON-encoded at
-   * creation, so it is accepted back as an object or as that string.
+   * rest_create_session() records the session id in the user's meta and stamps
+   * `metadata.wp_user_id` (which the caller cannot override) and, in the default
+   * vendor-data mode, `vendor_data = wp-{id}`; any one of them ties the session to
+   * the user. `metadata` is sent JSON-encoded at creation, so it is accepted back
+   * as an object or as that string.
    */
-  private function decision_belongs_to_user(array $decision, $user_id)
+  private function session_belongs_to_user(array $decision, $session_id, $user_id)
   {
+    if (hash_equals((string) get_user_meta($user_id, '_didit_session_id', true), (string) $session_id)) {
+      return true;
+    }
     $meta = $decision['metadata'] ?? null;
     if (is_string($meta)) {
       $meta = json_decode($meta, true);
@@ -1977,6 +2009,18 @@ final class Didit_Verify
       return sprintf(
         '<div class="didit-gate didit-gate-locked"><p style="color:#F59E0B;">%s</p></div>',
         esc_html__('Your identity verification is being reviewed. Please check back shortly.', 'didit-verify')
+      );
+    }
+
+    if ('api' !== get_option('didit_mode', 'unilink')) {
+      // A UniLink completion can never unlock this gate, so offering the button
+      // would show "Verified" while the content stays locked.
+      return sprintf(
+        '<div class="didit-gate didit-gate-locked"><p>%s</p>%s</div>',
+        esc_html($a['message']),
+        current_user_can('manage_options')
+          ? '<p>' . esc_html__('Didit Verify is in UniLink mode, which cannot unlock this content. Switch to API Session mode in Settings.', 'didit-verify') . '</p>'
+          : ''
       );
     }
 

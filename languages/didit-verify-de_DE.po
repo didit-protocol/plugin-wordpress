@@ -141,3 +141,22 @@ msgstr "Deine Bestellung wartet auf die Identitätsprüfung. Das dauert nur weni
 msgid "Verify your identity now"
 msgstr "Jetzt Identität verifizieren"
 
+#: didit-verify.php:1041
+msgid "Invalid session id."
+msgstr "Ungültige Sitzungs-ID."
+
+#: didit-verify.php:1050
+msgid "This site uses UniLink mode, which cannot confirm verification results. Switch Didit Verify to API Session mode to save them."
+msgstr "Diese Website nutzt den UniLink-Modus, der Verifizierungsergebnisse nicht bestätigen kann. Stelle Didit Verify auf den API-Session-Modus um, damit sie gespeichert werden."
+
+#: didit-verify.php:1059
+msgid "Could not confirm the verification result with Didit. It will be applied when the webhook arrives."
+msgstr "Das Verifizierungsergebnis konnte nicht bei Didit bestätigt werden. Es wird übernommen, sobald der Webhook eintrifft."
+
+#: didit-verify.php:1074
+msgid "This verification session does not belong to you."
+msgstr "Diese Verifizierungssitzung gehört nicht zu dir."
+
+#: didit-verify.php:2022
+msgid "Didit Verify is in UniLink mode, which cannot unlock this content. Switch to API Session mode in Settings."
+msgstr "Didit Verify ist im UniLink-Modus, der diesen Inhalt nicht freischalten kann. Stelle in den Einstellungen auf den API-Session-Modus um."

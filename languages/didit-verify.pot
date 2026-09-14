@@ -669,3 +669,26 @@ msgstr ""
 msgid "Didit: verification reminder %1$d of %2$d sent to %3$s."
 msgstr ""
 
+#: didit-verify.php:1041
+msgid "Invalid session id."
+msgstr ""
+
+#: didit-verify.php:1050
+msgid "This site uses UniLink mode, which cannot confirm verification results. Switch Didit Verify to API Session mode to save them."
+msgstr ""
+
+#: didit-verify.php:1059
+msgid "Could not confirm the verification result with Didit. It will be applied when the webhook arrives."
+msgstr ""
+
+#: didit-verify.php:1074
+msgid "This verification session does not belong to you."
+msgstr ""
+
+#: didit-verify.php:2022
+msgid "Didit Verify is in UniLink mode, which cannot unlock this content. Switch to API Session mode in Settings."
+msgstr ""
+
+#: didit-verify.php:196
+msgid "UniLink results cannot be confirmed by this site, so [didit_gate], [didit_status] and WooCommerce order verification require API mode."
+msgstr ""

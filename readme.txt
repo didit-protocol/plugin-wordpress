@@ -106,6 +106,8 @@ Sign up at [business.didit.me](https://business.didit.me), create a verification
 
 UniLink uses a single shared URL — quick to set up but every visitor uses the same session link. API mode creates a unique verification session per user with full tracking, and keeps your API key secure on the server.
 
+UniLink results cannot be confirmed by your site, so `[didit_gate]`, `[didit_status]` and WooCommerce order verification require API mode.
+
 = Does it work without WooCommerce? =
 
 Yes. Use the `[didit_verify]` shortcode on any page. WooCommerce integration is optional.
@@ -205,6 +207,11 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 = 0.3.2 =
 * Security: the browser completion callback (`POST /didit/v1/verify`) no longer trusts the `status` sent by the client. The plugin now reads the session decision from Didit with the site API key and only applies it when the session was created for the calling user (or the order being verified). Previously any logged-in user could mark their own account as verified, unlocking `[didit_gate]` content, by posting a forged completion.
+* The completion callback applies an order decision through the order key and the session stored on the order, even when the customer started the session as a guest and logged in afterwards. The logged-in user's own status only changes for a session created for that user.
+* The session id is now linked to the WordPress user when the session is created, so a webhook signed only with `X-Signature-Simple` still finds the user if the browser callback never arrived.
+* UniLink mode no longer tries to save results it cannot confirm: `[didit_gate]` shows administrators how to switch to API mode instead of a button that could not unlock it, and the verification button in API mode shows the status the site saved.
+* Tests now run in GitHub Actions on PHP 7.4, 8.2 and 8.4.
+* Site owners: update, then review users with `_didit_status = Approved` whose `_didit_session_id` has no matching session in the Didit Console if you suspect abuse.
 
 = 0.3.1 =
 * Page builders that render shortcode content outside the post content (for example Oxygen) no longer show an unstyled verification button or embedded container. The plugin stylesheet and the button appearance CSS are now always queued in the header, while the SDK script is still enqueued when the shortcode itself renders.
@@ -271,6 +278,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.3.2 =
+Security fix: logged-in users could mark themselves verified. Update now. `[didit_gate]`, `[didit_status]` and WooCommerce order verification now require API mode.
 
 = 0.3.0 =
 Customizable checkout copy, German translations, and per-product verification scope for WooCommerce.

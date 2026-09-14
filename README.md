@@ -50,6 +50,8 @@ Open <http://localhost:8080> and complete the WordPress setup wizard.
 2. Paste your UniLink URL (from [Didit Console](https://business.didit.me) → Workflow → Copy Link)
 3. Save
 
+> UniLink sessions are started from a shared URL, so the site cannot confirm who completed them. In UniLink mode results are shown in the button only: `[didit_gate]` stays locked, `[didit_status]` does not change and WooCommerce orders are not updated from the browser. Use API mode for any of those.
+
 #### API mode (recommended for production)
 
 1. Set **Mode** to `API Session`
@@ -290,7 +292,7 @@ wordpress-plugin/
 ├── languages/                    # POT template + German translations (de_DE, de_DE_formal)
 ├── uninstall.php                 # Cleans up options on plugin deletion
 ├── readme.txt                    # WordPress.org plugin directory format
-├── tests/                         # Webhook signature tests (plain PHP, no dependencies)
+├── tests/                         # Webhook, completion callback and shortcode tests (plain PHP, no dependencies; run in CI)
 ├── docker-compose.yml            # Local dev (WordPress + MySQL)
 └── README.md
 ```
@@ -301,7 +303,8 @@ wordpress-plugin/
 
 ```
 User clicks button → JS calls DiditSdk.startVerification({ url }) → Modal opens
-→ User completes verification → onComplete fires → Button shows "Verified"
+→ User completes verification → onComplete fires → Button shows the SDK result
+(nothing is saved on the site)
 ```
 
 ### API Flow
@@ -313,8 +316,12 @@ User clicks button
 → PHP checks: nonce ✓ → login ✓ → rate limit ✓
 → PHP calls Didit API with API key (server-side) → returns { url }
 → JS calls DiditSdk.startVerification({ url }) → modal opens
-→ User completes → onComplete fires → button shows "Verified"
-→ JS sends POST /wp-json/didit/v1/verify → saves result to user meta
+→ PHP stores the session id on the user (trusted session → user binding)
+→ User completes → onComplete fires
+→ JS sends POST /wp-json/didit/v1/verify { sessionId }
+→ PHP reads GET /v3/session/{id}/decision/ with the API key, checks the session
+  belongs to this user (or to the order being verified), saves Didit's status
+→ Button shows the status the site saved
 ```
 
 ### WooCommerce Flow
@@ -436,7 +443,7 @@ document.addEventListener('didit:complete', function (e) {
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | `POST` | `/wp-json/didit/v1/session` | Create a verification session | CSRF nonce + login, or order key (after-purchase) |
-| `POST` | `/wp-json/didit/v1/verify` | Save verification result to user/order meta | Login, or order key (after-purchase) |
+| `POST` | `/wp-json/didit/v1/verify` | Confirm a completion with Didit and save its decision to user/order meta (API mode only) | Login, or order key (after-purchase) |
 | `POST` | `/wp-json/didit/v1/webhook` | Didit webhook receiver (`status.updated`) | HMAC-SHA256 signature (`X-Signature-V2` → `X-Signature` → `X-Signature-Simple`) + timestamp |
 
 ## Uninstall

@@ -7,20 +7,18 @@
   var DiditSdk = window.DiditSDK.DiditSdk;
   var i18n = cfg.i18n || {};
 
-  DiditSdk.shared.onComplete = function (result) {
-    var status = result.session ? result.session.status : "";
-
+  function setButtonState(type, status) {
     document.querySelectorAll(".didit-verify-btn").forEach(function (btn) {
       btn.classList.remove("didit-verified", "didit-declined", "didit-in-review");
 
-      if (result.type === "completed" && status === "Approved") {
+      if (type === "completed" && status === "Approved") {
         btn.textContent = btn.dataset.success || "Verified";
         btn.classList.add("didit-verified");
         btn.disabled = true;
-      } else if (result.type === "completed" && status === "Declined") {
+      } else if (type === "completed" && status === "Declined") {
         btn.textContent = btn.dataset.text || "Verify Identity";
         btn.disabled = false;
-      } else if (result.type === "completed") {
+      } else if (type === "completed") {
         btn.textContent = i18n.inReview || "Verification In Review";
         btn.classList.add("didit-in-review");
         btn.disabled = true;
@@ -29,6 +27,10 @@
         btn.disabled = false;
       }
     });
+  }
+
+  DiditSdk.shared.onComplete = function (result) {
+    var status = result.session ? result.session.status : "";
 
     var hidden = document.getElementById("didit_session_id");
     if (hidden && result.session && result.session.sessionId) {
@@ -43,11 +45,19 @@
       } catch (e) {}
     }
 
-    if (cfg.restUrl && cfg.nonce) {
+    // In API mode the site confirms a completion with Didit before saving it, so
+    // the button shows the status the site stored rather than the one the SDK
+    // reported. UniLink results cannot be saved, so they are not sent.
+    var confirmWithSite = cfg.mode === "api" && cfg.restUrl && cfg.nonce;
+
+    if (!confirmWithSite || result.type !== "completed") {
+      setButtonState(result.type, status);
+    }
+
+    if (confirmWithSite) {
       var verifyBody = {
         type: result.type,
-        sessionId: result.session ? result.session.sessionId : "",
-        status: result.session ? result.session.status : ""
+        sessionId: result.session ? result.session.sessionId : ""
       };
       var orderBtn = document.querySelector(".didit-verify-btn[data-order-id]");
       if (orderBtn) {
@@ -62,7 +72,27 @@
           "X-WP-Nonce": cfg.nonce
         },
         body: JSON.stringify(verifyBody)
-      }).catch(function () {});
+      })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            return { response: r, data: d };
+          });
+        })
+        .then(function (res) {
+          if (result.type !== "completed") return;
+          if (res.response.ok) {
+            setButtonState("completed", res.data.status);
+          } else if (res.response.status === 401) {
+            // Anonymous visitor outside an order: nothing is stored on the site.
+            setButtonState(result.type, status);
+          } else {
+            setButtonState("error", "");
+            alert((i18n.verificationError || "Verification error:") + " " + (res.data.message || "Error " + res.response.status));
+          }
+        })
+        .catch(function () {
+          if (result.type === "completed") setButtonState("error", "");
+        });
     }
 
     document.dispatchEvent(new CustomEvent("didit:complete", { detail: result }));

@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Requires PHP: 7.4 in the plugin header, plus current releases.
+        php: ["7.4", "8.2", "8.4"]
+    container: php:${{ matrix.php }}-cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint PHP
+        run: |
+          set -e
+          for f in $(find . -name '*.php' -not -path './.git/*'); do
+            php -l "$f"
+          done
+
+      - name: Webhook signature tests
+        run: php tests/test-webhook-signature.php
+
+      - name: Verification callback tests
+        run: php tests/test-verify-endpoint.php
+
+      - name: Shortcode asset tests
+        run: php tests/test-shortcode-assets.php
