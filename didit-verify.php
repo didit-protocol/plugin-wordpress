@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.1
+ * Version:     0.3.2
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.1');
+define('DIDIT_VERIFY_VERSION', '0.3.2');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -44,6 +44,7 @@ final class Didit_Verify
 
     add_action('admin_menu', [$this, 'admin_menu']);
     add_action('admin_init', [$this, 'admin_register_settings']);
+    add_action('admin_notices', [$this, 'configuration_notice']);
     add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
 
     add_filter('manage_users_columns', [$this, 'users_column']);
@@ -73,6 +74,19 @@ final class Didit_Verify
       'didit-verify',
       [$this, 'admin_render_page']
     );
+  }
+
+  public function configuration_notice()
+  {
+    if (!current_user_can('manage_options') || 'settings_page_didit-verify' !== get_current_screen()->id) {
+      return;
+    }
+    if ('unilink' === get_option('didit_mode', 'unilink') || !get_option('didit_api_key')) {
+      echo '<div class="notice notice-warning"><p>' . esc_html__(
+        'UniLink opens a verification flow for manual review. To protect content or checkout, use API Session mode with a Workflow ID and API Key. Only a confirmed Didit decision grants access. Users verified by older plugin versions must verify again.',
+        'didit-verify'
+      ) . '</p></div>';
+    }
   }
 
   public function admin_register_settings()
@@ -108,9 +122,9 @@ final class Didit_Verify
       'didit_webhook_secret' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
       'didit_btn_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
       'didit_btn_success_text' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
-      'didit_btn_bg_color' => ['sanitize_callback' => 'sanitize_hex_color', 'default' => '#2667ff'],
+      'didit_btn_bg_color' => ['sanitize_callback' => 'sanitize_hex_color', 'default' => '#111111'],
       'didit_btn_text_color' => ['sanitize_callback' => 'sanitize_hex_color', 'default' => '#ffffff'],
-      'didit_btn_border_radius' => ['sanitize_callback' => 'absint', 'default' => 8],
+      'didit_btn_border_radius' => ['sanitize_callback' => 'absint', 'default' => 999],
       'didit_btn_padding_v' => ['sanitize_callback' => 'absint', 'default' => 12],
       'didit_btn_padding_h' => ['sanitize_callback' => 'absint', 'default' => 24],
       'didit_btn_font_size' => ['sanitize_callback' => 'absint', 'default' => 16],
@@ -416,9 +430,9 @@ final class Didit_Verify
 
   public function section_button_preview()
   {
-    $bg = get_option('didit_btn_bg_color', '#2667ff');
+    $bg = get_option('didit_btn_bg_color', '#111111');
     $color = get_option('didit_btn_text_color', '#ffffff');
-    $rad = (int) get_option('didit_btn_border_radius', 8);
+    $rad = (int) get_option('didit_btn_border_radius', 999);
     $pv = (int) get_option('didit_btn_padding_v', 12);
     $ph = (int) get_option('didit_btn_padding_h', 24);
     $fs = (int) get_option('didit_btn_font_size', 16);
@@ -435,7 +449,7 @@ final class Didit_Verify
                  border-radius:<?php echo esc_attr($rad); ?>px;
                  padding:<?php echo esc_attr($pv); ?>px <?php echo esc_attr($ph); ?>px;
                  font-size:<?php echo esc_attr($fs); ?>px;
-                 font-weight:600;
+                 font-weight:500;
                  font-family:inherit;
                  cursor:pointer;
                  line-height:1.4;">
@@ -473,7 +487,7 @@ final class Didit_Verify
     printf(
       '<input type="color" name="didit_btn_bg_color" value="%s" />
       <p class="description">%s</p>',
-      esc_attr(get_option('didit_btn_bg_color', '#2667ff')),
+      esc_attr(get_option('didit_btn_bg_color', '#111111')),
       esc_html__('Button background color.', 'didit-verify')
     );
   }
@@ -491,9 +505,9 @@ final class Didit_Verify
   public function field_btn_border_radius()
   {
     printf(
-      '<input type="number" name="didit_btn_border_radius" value="%s" min="0" max="50" style="width:80px" /> px
+      '<input type="number" name="didit_btn_border_radius" value="%s" min="0" max="999" style="width:80px" /> px
       <p class="description">%s</p>',
-      esc_attr(get_option('didit_btn_border_radius', 8)),
+      esc_attr(get_option('didit_btn_border_radius', 999)),
       esc_html__('Corner rounding in pixels. 0 = square, 50 = pill shape.', 'didit-verify')
     );
   }
@@ -794,9 +808,7 @@ final class Didit_Verify
     register_rest_route('didit/v1', '/verify', [
       'methods' => 'POST',
       'callback' => [$this, 'rest_save_verification'],
-      'permission_callback' => function ($request) {
-        return is_user_logged_in() || (bool) $this->validate_order_context($request->get_json_params());
-      },
+      'permission_callback' => [$this, 'rest_check_permission'],
     ]);
 
     register_rest_route('didit/v1', '/webhook', [
@@ -817,7 +829,8 @@ final class Didit_Verify
       return true;
     }
 
-    if (get_option('didit_require_login', true) && !is_user_logged_in()) {
+    if (get_option('didit_require_login', true) && !is_user_logged_in()
+      && !('checkout' === $this->wc_mode() && $this->wc_cart_requires_verification())) {
       return new WP_Error('rest_forbidden', __('You must be logged in to start verification.', 'didit-verify'), ['status' => 401]);
     }
 
@@ -855,6 +868,8 @@ final class Didit_Verify
       return new WP_Error('not_configured', __('Didit API credentials are not configured.', 'didit-verify'), ['status' => 500]);
     }
 
+    // Bind approval to this browser before creating a session. Never bind a caller-supplied ID.
+    $owner = $this->verification_owner(true);
     $body = ['workflow_id' => $workflow_id];
 
     $vendor_data = $this->resolve_vendor_data();
@@ -881,8 +896,8 @@ final class Didit_Verify
     $order = $this->validate_order_context($input);
     if ($order) {
       $existing_url = $order->get_meta('_didit_session_url');
-      $existing_status = $order->get_meta('_didit_status');
-      if ($existing_url && !in_array($existing_status, ['Approved', 'Declined', 'Expired', 'KYC Expired'], true)) {
+      $existing_status = $this->confirmed_order_status($order);
+      if ($existing_url && $this->stored_session((string) $order->get_meta('_didit_session_id')) && !in_array($existing_status, ['Approved', 'Declined', 'Expired', 'KYC Expired'], true)) {
         return rest_ensure_response(['url' => $existing_url]);
       }
     }
@@ -979,14 +994,31 @@ final class Didit_Verify
       ? 'https://verify.didit.me/session/' . $data['session_token']
       : null);
 
-    if (!$url) {
+    $session_id = sanitize_text_field($data['session_id'] ?? '');
+    if (!$url || !$this->valid_session_id($session_id)) {
       return new WP_Error('api_error', __('No verification URL returned.', 'didit-verify'), ['status' => 500]);
+    }
+
+    $user_id = get_current_user_id();
+    if ($order && (int) $order->get_customer_id() !== $user_id) {
+      $user_id = 0;
+    }
+    $this->store_session($session_id, [
+      'owner' => $owner,
+      'user_id' => $user_id,
+      'order_id' => $order ? $order->get_id() : 0,
+      'status' => 'Not Started',
+      'event_timestamp' => 0,
+      'consumed_order_id' => 0,
+    ]);
+    if ($user_id) {
+      update_user_meta($user_id, '_didit_pending_session_id', $session_id);
     }
 
     if ($order) {
       $order->update_meta_data('_didit_session_id', sanitize_text_field($data['session_id'] ?? ''));
       $order->update_meta_data('_didit_session_url', esc_url_raw($url));
-      if (!$order->get_meta('_didit_status')) {
+      if (!$this->confirmed_order_status($order)) {
         $order->update_meta_data('_didit_status', 'Not Started');
       }
       $order->add_order_note(sprintf(
@@ -999,46 +1031,187 @@ final class Didit_Verify
 
     do_action('didit_session_created', $url, get_current_user_id() ?: null, $vendor_data);
 
-    return rest_ensure_response(['url' => $url]);
+    return rest_ensure_response(['url' => $url, 'sessionId' => $session_id]);
+  }
+
+  private function valid_session_id($session_id): bool
+  {
+    return is_string($session_id) && 1 === preg_match('/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i', $session_id);
+  }
+
+  private function session_key($session_id): string
+  {
+    return 'didit_bound_' . hash('sha256', $session_id);
+  }
+
+  private function stored_session($session_id)
+  {
+    return $this->valid_session_id($session_id) ? get_option($this->session_key($session_id), false) : false;
+  }
+
+  private function store_session($session_id, array $record)
+  {
+    update_option($this->session_key($session_id), $record, false);
+  }
+
+  private function verification_owner(bool $create = false): string
+  {
+    $cookie = $_COOKIE['didit_verification_owner'] ?? '';
+    if (!is_string($cookie) || !preg_match('/^[a-f0-9]{64}$/', $cookie)) {
+      if (!$create) {
+        return '';
+      }
+      $cookie = bin2hex(random_bytes(32));
+      setcookie('didit_verification_owner', $cookie, [
+        'expires' => time() + 30 * DAY_IN_SECONDS,
+        'path' => '/',
+        'secure' => is_ssl(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+      ]);
+      $_COOKIE['didit_verification_owner'] = $cookie;
+    }
+    return hash('sha256', $cookie);
+  }
+
+  private function session_belongs_to_request($record, $order = null): bool
+  {
+    if (!is_array($record)) {
+      return false;
+    }
+    if ($order) {
+      return (int) $record['order_id'] === (int) $order->get_id();
+    }
+    return empty($record['order_id'])
+      && (0 === (int) $record['user_id'] || (int) $record['user_id'] === get_current_user_id())
+      && hash_equals($record['owner'], $this->verification_owner());
+  }
+
+  private function normalize_status($status): string
+  {
+    if (!is_string($status)) {
+      return '';
+    }
+    foreach (['Not Started', 'In Progress', 'In Review', 'Approved', 'Declined', 'Abandoned', 'Expired', 'KYC Expired'] as $known) {
+      if (strtolower(str_replace('_', ' ', $status)) === strtolower($known)) {
+        return $known;
+      }
+    }
+    return '';
+  }
+
+  private function confirm_session($session_id, $order = null)
+  {
+    $record = $this->stored_session($session_id);
+    if (!$this->session_belongs_to_request($record, $order)) {
+      return new WP_Error('didit_session_mismatch', __('Start a new verification from this page.', 'didit-verify'), ['status' => 403]);
+    }
+    $api_key = get_option('didit_api_key', '');
+    if (!$api_key) {
+      return new WP_Error('didit_not_configured', __('API Session mode is required to confirm verification.', 'didit-verify'), ['status' => 503]);
+    }
+    $response = wp_remote_get(DIDIT_API_URL . rawurlencode($session_id) . '/decision/', [
+      'headers' => ['x-api-key' => $api_key],
+      'timeout' => 15,
+    ]);
+    if (is_wp_error($response) || 200 !== wp_remote_retrieve_response_code($response)) {
+      return new WP_Error('didit_confirmation_unavailable', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 503]);
+    }
+    $data = json_decode(wp_remote_retrieve_body($response), true);
+    $status = $this->normalize_status($data['status'] ?? '');
+    if (!$status || ($data['session_id'] ?? '') !== $session_id) {
+      return new WP_Error('didit_invalid_decision', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 502]);
+    }
+    $this->apply_confirmed_status($session_id, $record, $status, time());
+    return $status;
+  }
+
+  private function apply_confirmed_status($session_id, array $record, string $status, int $timestamp)
+  {
+    if ($timestamp < (int) ($record['event_timestamp'] ?? 0)) {
+      return;
+    }
+    $record['status'] = $status;
+    $record['event_timestamp'] = $timestamp;
+    $this->store_session($session_id, $record);
+    $user_id = (int) $record['user_id'];
+    if ($user_id && (string) get_user_meta($user_id, '_didit_pending_session_id', true) === $session_id) {
+      update_user_meta($user_id, '_didit_session_id', $session_id);
+      update_user_meta($user_id, '_didit_confirmed_session_id', $session_id);
+      update_user_meta($user_id, '_didit_status', $status);
+      update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
+      if ('Approved' === $status) {
+        update_user_meta($user_id, '_didit_verified', 1);
+      } else {
+        delete_user_meta($user_id, '_didit_verified');
+      }
+    }
+    if (!empty($record['order_id']) && function_exists('wc_get_order')) {
+      $order = wc_get_order($record['order_id']);
+      if ($order && (string) $order->get_meta('_didit_session_id') === $session_id) {
+        $this->wc_apply_verification_to_order($order, $status, 'verified-server');
+      }
+    }
+    if (in_array($status, ['Approved', 'Declined'], true)) {
+      do_action('didit_verification_completed', $user_id, $session_id, $status);
+    }
+  }
+
+  private function confirmed_user_status($user_id): string
+  {
+    $session_id = (string) get_user_meta($user_id, '_didit_confirmed_session_id', true);
+    // Earlier versions accepted browser claims. Those values must never unlock content.
+    if (!$session_id || $session_id !== (string) get_user_meta($user_id, '_didit_session_id', true)) {
+      return '';
+    }
+    return (string) get_user_meta($user_id, '_didit_status', true);
+  }
+
+  public function is_user_verified($user_id): bool
+  {
+    return 'Approved' === $this->confirmed_user_status(absint($user_id));
   }
 
   public function rest_save_verification($request)
   {
-    $user_id = get_current_user_id();
     $input = $request->get_json_params();
-    $order = $this->validate_order_context($input);
-
-    if (!$user_id && !$order) {
-      return new WP_Error('not_logged_in', 'User not logged in.', ['status' => 401]);
-    }
-
-    $type = sanitize_text_field($input['type'] ?? '');
-    $session_id = sanitize_text_field($input['sessionId'] ?? '');
-    $status = sanitize_text_field($input['status'] ?? '');
-
-    if ('completed' === $type) {
-      if ($user_id) {
-        update_user_meta($user_id, '_didit_session_id', $session_id);
-        update_user_meta($user_id, '_didit_status', $status);
-        update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
-
-        if ('Approved' === $status) {
-          update_user_meta($user_id, '_didit_verified', 1);
-        } else {
-          delete_user_meta($user_id, '_didit_verified');
-        }
+    $session_id = $input['sessionId'] ?? '';
+    $type = $input['type'] ?? '';
+    if ('cancelled' === $type) {
+      if ($this->session_belongs_to_request($this->stored_session($session_id), $this->validate_order_context($input))) {
+        do_action('didit_verification_cancelled', get_current_user_id(), $session_id);
       }
-
-      if ($order && $session_id && hash_equals((string) $order->get_meta('_didit_session_id'), $session_id)) {
-        $this->wc_apply_verification_to_order($order, $status, 'browser');
-      }
-
-      do_action('didit_verification_completed', $user_id, $session_id, $status);
-    } elseif ('cancelled' === $type) {
-      do_action('didit_verification_cancelled', $user_id, $session_id);
+      return rest_ensure_response(['saved' => false, 'status' => '']);
     }
+    $status = $this->confirm_session($session_id, $this->validate_order_context($input));
+    if (is_wp_error($status)) {
+      return $status;
+    }
+    return rest_ensure_response(['saved' => true, 'status' => $status, 'sessionId' => $session_id]);
+  }
 
-    return rest_ensure_response(['saved' => true]);
+  private function checkout_session_is_approved($session_id): bool
+  {
+    $record = $this->stored_session($session_id);
+    if (!$this->session_belongs_to_request($record) || !empty($record['consumed_order_id'])) {
+      return false;
+    }
+    return 'Approved' === $this->confirm_session($session_id);
+  }
+
+  private function attach_checkout_session($order, $session_id)
+  {
+    $record = $this->stored_session($session_id);
+    if (!$this->session_belongs_to_request($record) || 'Approved' !== $record['status'] || !empty($record['consumed_order_id'])) {
+      return;
+    }
+    $record['consumed_order_id'] = $order->get_id();
+    $record['order_id'] = $order->get_id();
+    $this->store_session($session_id, $record);
+    $order->update_meta_data('_didit_session_id', $session_id);
+    $order->update_meta_data('_didit_status', 'Approved');
+    $order->update_meta_data('_didit_confirmed_session_id', $session_id);
+    $order->save();
   }
 
   /**
@@ -1168,29 +1341,6 @@ final class Didit_Verify
     return '';
   }
 
-  /**
-   * Resolve the WordPress user a session belongs to from stored state.
-   *
-   * The session id is written to user meta when the verification is saved, so this
-   * mapping is local and trustworthy - unlike the payload's `metadata.wp_user_id` and
-   * `vendor_data`, which X-Signature-Simple does not authenticate.
-   */
-  private function user_id_for_session($session_id)
-  {
-    if (!$session_id) {
-      return 0;
-    }
-
-    $users = get_users([
-      'meta_key' => '_didit_session_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-      'meta_value' => $session_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
-      'number' => 1,
-      'fields' => 'ID',
-    ]);
-
-    return $users ? absint($users[0]) : 0;
-  }
-
   public function rest_webhook($request)
   {
     $secret = get_option('didit_webhook_secret', '');
@@ -1234,10 +1384,6 @@ final class Didit_Verify
       return new WP_Error('invalid_signature', __('Webhook signature mismatch.', 'didit-verify'), ['status' => 401]);
     }
 
-    // X-Signature-Simple signs the envelope only, so everything outside
-    // timestamp/session_id/status/webhook_type stays unauthenticated on that path.
-    $body_is_signed = ('simple' !== $verified_with);
-
     if ('status.updated' !== ($payload['webhook_type'] ?? '')) {
       return rest_ensure_response(['received' => true, 'ignored' => true]);
     }
@@ -1248,42 +1394,12 @@ final class Didit_Verify
       return new WP_Error('invalid_payload', __('Invalid webhook payload.', 'didit-verify'), ['status' => 400]);
     }
 
-    if (class_exists('WooCommerce')) {
-      $orders = wc_get_orders([
-        'limit' => -1,
-        'meta_query' => [['key' => '_didit_session_id', 'value' => $session_id]],
-      ]);
-      foreach ($orders as $wc_order) {
-        $this->wc_apply_verification_to_order($wc_order, $status, 'webhook');
-      }
-    }
-
-    $wp_user_id = 0;
-    if ($body_is_signed) {
-      $meta = is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [];
-      $wp_user_id = absint($meta['wp_user_id'] ?? 0);
-      if (!$wp_user_id && preg_match('/^wp-(\d+)$/', (string) ($payload['vendor_data'] ?? ''), $m)) {
-        $wp_user_id = absint($m[1]);
-      }
-    }
-    if (!$wp_user_id) {
-      // Falls back to the session -> user mapping this site stored itself, which is the
-      // only usable source when the payload is unsigned beyond the envelope.
-      $wp_user_id = $this->user_id_for_session($session_id);
-    }
-    if ($wp_user_id && get_userdata($wp_user_id)) {
-      update_user_meta($wp_user_id, '_didit_session_id', $session_id);
-      update_user_meta($wp_user_id, '_didit_status', $status);
-      update_user_meta($wp_user_id, '_didit_verified_at', current_time('mysql'));
-      if ('Approved' === $status) {
-        update_user_meta($wp_user_id, '_didit_verified', 1);
-      } else {
-        delete_user_meta($wp_user_id, '_didit_verified');
-      }
-    }
-
-    if (in_array($status, ['Approved', 'Declined'], true)) {
-      do_action('didit_verification_completed', $wp_user_id, $session_id, $status);
+    // Signed metadata can still originate in a public UniLink. Only a binding created
+    // by this server is allowed to route an approval to a user or order.
+    $record = $this->stored_session($session_id);
+    $status = $this->normalize_status($status);
+    if ($record && $status) {
+      $this->apply_confirmed_status($session_id, $record, $status, $timestamp);
     }
 
     return rest_ensure_response(['received' => true]);
@@ -1646,9 +1762,17 @@ final class Didit_Verify
     return $this->wc_items_require_verification($product_ids);
   }
 
+  private function confirmed_order_status($order): string
+  {
+    $session_id = (string) $order->get_meta('_didit_confirmed_session_id');
+    return $session_id && $session_id === (string) $order->get_meta('_didit_session_id')
+      ? (string) $order->get_meta('_didit_status') : '';
+  }
+
   private function wc_apply_verification_to_order($order, string $status, string $source): bool
   {
-    $changed = (string) $order->get_meta('_didit_status') !== $status;
+    $changed = (string) $this->confirmed_order_status($order) !== $status;
+    $order->update_meta_data('_didit_confirmed_session_id', (string) $order->get_meta('_didit_session_id'));
 
     if ($changed) {
       $order->update_meta_data('_didit_status', $status);
@@ -1660,10 +1784,10 @@ final class Didit_Verify
       ));
     }
 
-    if ('Approved' === $status && 'webhook' === $source && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
+    if ('Approved' === $status && 'verified-server' === $source && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
       $order->delete_meta_data('_didit_held');
       $order->save();
-      $order->update_status('processing', __('Didit: identity verified — order released.', 'didit-verify'));
+      $order->update_status('processing', __('Didit: identity verified - order released.', 'didit-verify'));
     } elseif ($changed) {
       $order->save();
     }
@@ -1737,18 +1861,18 @@ final class Didit_Verify
 
     wp_enqueue_style('didit-verify', DIDIT_VERIFY_URL . 'assets/css/didit-verify.css', [], DIDIT_VERIFY_VERSION);
 
-    $bg = esc_attr(get_option('didit_btn_bg_color', '#2667ff'));
+    $bg = esc_attr(get_option('didit_btn_bg_color', '#111111'));
     $tc = esc_attr(get_option('didit_btn_text_color', '#ffffff'));
-    $rad = (int) get_option('didit_btn_border_radius', 8);
+    $rad = (int) get_option('didit_btn_border_radius', 999);
     $pv = (int) get_option('didit_btn_padding_v', 12);
     $ph = (int) get_option('didit_btn_padding_h', 24);
     $fs = (int) get_option('didit_btn_font_size', 16);
 
-    $css = ".didit-verify-btn{background:{$bg};color:{$tc};border:none;border-radius:{$rad}px;padding:{$pv}px {$ph}px;font-size:{$fs}px;font-weight:600;font-family:inherit;cursor:pointer;line-height:1.4;transition:opacity .2s,box-shadow .2s;}"
-      . ".didit-verify-btn:hover{opacity:.9;box-shadow:0 4px 12px rgba(0,0,0,.2);}"
+    $css = ".didit-verify-btn{background:{$bg};color:{$tc};border:1px solid #666;border-radius:{$rad}px;padding:{$pv}px {$ph}px;font-size:{$fs}px;font-weight:500;font-family:inherit;cursor:pointer;line-height:1.4;transition:opacity .2s,box-shadow .2s;}"
+      . ".didit-verify-btn:hover{opacity:.9;box-shadow:none;}"
       . ".didit-verify-btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}"
-      . ".didit-verify-btn.didit-verified{background:#41D97F;opacity:1;}"
-      . ".didit-verify-btn.didit-in-review{background:#F59E0B;opacity:1;}"
+      . ".didit-verify-btn.didit-verified{background:#dcfce7;color:#166534;border-color:#86efac;opacity:1;}"
+      . ".didit-verify-btn.didit-in-review{background:#fef3c7;color:#92400e;border-color:#fcd34d;opacity:1;}"
       . ".didit-verify-btn.didit-declined{background:{$bg};}";
 
     wp_add_inline_style('didit-verify', $css);
@@ -1780,7 +1904,13 @@ final class Didit_Verify
       'loggingEnabled' => (bool) get_option('didit_logging', false),
       'i18n' => [
         'creatingSession' => __('Creating session…', 'didit-verify'),
-        'inReview' => __('Verification In Review', 'didit-verify'),
+        'inReview' => __('Your verification is being reviewed. Check again shortly.', 'didit-verify'),
+        'confirming' => __('Confirming verification…', 'didit-verify'),
+        'checkStatus' => __('Check status', 'didit-verify'),
+        'approved' => __('Identity verified. You can continue.', 'didit-verify'),
+        'declined' => __('Verification declined. Please try again.', 'didit-verify'),
+        'expired' => __('Verification expired. Please start again.', 'didit-verify'),
+        'submitted' => __('Verification submitted. Your result is available from the service provider.', 'didit-verify'),
         'verificationError' => __('Verification error:', 'didit-verify'),
         'noUrl' => __('No verification URL returned', 'didit-verify'),
       ],
@@ -1861,7 +1991,7 @@ final class Didit_Verify
       return sprintf('<span class="didit-status didit-not-logged-in">%s</span>', esc_html($a['login_text']));
     }
 
-    $status = get_user_meta(get_current_user_id(), '_didit_status', true);
+    $status = $this->confirmed_user_status(get_current_user_id());
 
     if ('Approved' === $status) {
       return sprintf('<span class="didit-status didit-status-approved" style="color:#41D97F;">%s</span>', esc_html($a['verified_text']));
@@ -1889,7 +2019,7 @@ final class Didit_Verify
       );
     }
 
-    $status = get_user_meta(get_current_user_id(), '_didit_status', true);
+    $status = $this->confirmed_user_status(get_current_user_id());
     if ('Approved' === $status) {
       return '<div class="didit-gate didit-gate-unlocked">' . do_shortcode($content) . '</div>';
     }
@@ -1919,7 +2049,7 @@ final class Didit_Verify
     if ('didit_verified' !== $column_name) {
       return $output;
     }
-    $status = get_user_meta($user_id, '_didit_status', true);
+    $status = $this->confirmed_user_status($user_id);
     $date = get_user_meta($user_id, '_didit_verified_at', true);
 
     if ('Approved' === $status) {
@@ -2002,14 +2132,14 @@ final class Didit_Verify
     }
     ?>
     <?php
+    $this->enqueue_sdk_assets();
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
     $btn_text = $this->btn_text();
     $btn_success = $this->btn_success_text();
     ?>
-    <div id="didit-wc-verify" class="didit-verify-wrap"
-      style="margin: 1.5em 0; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
+    <div id="didit-wc-verify" class="didit-verify-wrap didit-wc-verification">
       <h3 style="margin-top:0;"><?php echo esc_html($this->wc_box_title()); ?></h3>
-      <p style="color:#666; font-size:0.9em;">
+      <p class="didit-verification-description">
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
@@ -2035,7 +2165,7 @@ final class Didit_Verify
       ? sanitize_text_field(wp_unslash($_POST['didit_session_id']))
       : '';
 
-    if (empty($session_id)) {
+    if (!$this->checkout_session_is_approved($session_id)) {
       wc_add_notice(
         __('Please complete identity verification before placing your order.', 'didit-verify'),
         'error'
@@ -2046,17 +2176,10 @@ final class Didit_Verify
   public function wc_save_order_meta($order_id)
   {
     // phpcs:ignore WordPress.Security.NonceVerification.Missing
-    if (!isset($_POST['didit_session_id'])) {
-      return;
-    }
-    $session_id = sanitize_text_field(wp_unslash($_POST['didit_session_id']));
-    if (empty($session_id)) {
-      return;
-    }
+    $session_id = sanitize_text_field(wp_unslash($_POST['didit_session_id'] ?? ''));
     $order = wc_get_order($order_id);
-    if ($order) {
-      $order->update_meta_data('_didit_session_id', $session_id);
-      $order->save();
+    if ($order && $session_id) {
+      $this->attach_checkout_session($order, $session_id);
     }
   }
 
@@ -2064,7 +2187,7 @@ final class Didit_Verify
   {
     $session_id = $order->get_meta('_didit_session_id');
     if ($session_id) {
-      $status = (string) $order->get_meta('_didit_status');
+      $status = (string) $this->confirmed_order_status($order);
       printf(
         '<p><strong>%s</strong> %s%s</p>',
         esc_html__('Didit Verification:', 'didit-verify'),
@@ -2116,13 +2239,13 @@ final class Didit_Verify
     }
     $rendered = true;
 
-    $status = (string) $order->get_meta('_didit_status');
+    $status = (string) $this->confirmed_order_status($order);
 
     if ('Approved' === $status) {
       return sprintf(
         '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #41D97F; border-radius:6px;">
           <h3 style="margin-top:0;">%s</h3>
-          <p style="color:#41D97F; font-weight:600; margin:0;">%s</p>
+          <p style="color:#41D97F; font-weight:500; margin:0;">%s</p>
         </div>',
         esc_html($this->wc_box_title()),
         esc_html__('Your identity has been verified. Thank you!', 'didit-verify')
@@ -2133,7 +2256,7 @@ final class Didit_Verify
       return sprintf(
         '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #F59E0B; border-radius:6px;">
           <h3 style="margin-top:0;">%s</h3>
-          <p style="color:#F59E0B; font-weight:600; margin:0;">%s</p>
+          <p style="color:#F59E0B; font-weight:500; margin:0;">%s</p>
         </div>',
         esc_html($this->wc_box_title()),
         esc_html__('Your verification is being reviewed. No further action is needed.', 'didit-verify')
@@ -2144,6 +2267,7 @@ final class Didit_Verify
       ? __('Your previous verification attempt was declined. Please try again.', 'didit-verify')
       : $this->wc_post_purchase_text();
 
+    $this->enqueue_sdk_assets();
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
     $btn_text = $this->btn_text();
     $btn_success = $this->btn_success_text();
@@ -2151,7 +2275,7 @@ final class Didit_Verify
     return sprintf(
       '<div id="didit-wc-verify" class="didit-verify-wrap" style="margin:1.5em 0; padding:1em; border:1px solid #ddd; border-radius:6px;">
         <h3 style="margin-top:0;">%s</h3>
-        <p style="color:#666; font-size:0.9em;">%s</p>
+        <p class="didit-verification-description">%s</p>
         <button type="button" class="didit-verify-btn" data-text="%s" data-success="%s" data-order-id="%d" data-order-key="%s"%s>%s</button>
         %s
       </div>',
@@ -2188,7 +2312,7 @@ final class Didit_Verify
       $holding || 'processing' !== $to
       || !get_option('didit_wc_hold', false) || 'after_purchase' !== $this->wc_mode()
       || !$order->get_meta('_didit_requires_verification')
-      || 'Approved' === $order->get_meta('_didit_status')
+      || 'Approved' === $this->confirmed_order_status($order)
     ) {
       return;
     }
@@ -2204,7 +2328,7 @@ final class Didit_Verify
     if (
       $sent_to_admin || 'after_purchase' !== $this->wc_mode()
       || !$order->get_meta('_didit_requires_verification')
-      || in_array($order->get_meta('_didit_status'), ['Approved', 'In Review'], true)
+      || in_array($this->confirmed_order_status($order), ['Approved', 'In Review'], true)
     ) {
       return;
     }
@@ -2250,7 +2374,7 @@ final class Didit_Verify
     if (
       !$order || 'after_purchase' !== $this->wc_mode() || !get_option('didit_wc_reminders', false)
       || !$order->get_meta('_didit_requires_verification')
-      || in_array($order->get_meta('_didit_status'), ['Approved', 'Declined', 'In Review'], true)
+      || in_array($this->confirmed_order_status($order), ['Approved', 'Declined', 'In Review'], true)
       || in_array($order->get_status(), ['cancelled', 'refunded', 'failed'], true)
     ) {
       return;
@@ -2301,16 +2425,16 @@ final class Didit_Verify
       return $block_content;
     }
 
+    $this->enqueue_sdk_assets();
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
     $btn_text = $this->btn_text();
     $btn_success = $this->btn_success_text();
 
     ob_start();
     ?>
-    <div id="didit-wc-verify" class="didit-verify-wrap"
-      style="margin: 1.5em 0; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
+    <div id="didit-wc-verify" class="didit-verify-wrap didit-wc-verification">
       <h3 style="margin-top:0;"><?php echo esc_html($this->wc_box_title()); ?></h3>
-      <p style="color:#666; font-size:0.9em;">
+      <p class="didit-verification-description">
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
@@ -2330,6 +2454,9 @@ final class Didit_Verify
 
   public function wc_block_validate_checkout($result)
   {
+    if (is_wp_error($result)) {
+      return $result;
+    }
     if ('checkout' !== $this->wc_mode()) {
       return $result;
     }
@@ -2351,7 +2478,7 @@ final class Didit_Verify
     $body = json_decode($raw, true);
     $session_id = $body['extensions']['didit-verify']['sessionId'] ?? '';
 
-    if (empty($session_id)) {
+    if (!$this->checkout_session_is_approved($session_id)) {
       return new WP_Error(
         'didit_verification_required',
         __('Please complete identity verification before placing your order.', 'didit-verify'),
@@ -2369,8 +2496,7 @@ final class Didit_Verify
     if (empty($this->block_session_id)) {
       return;
     }
-    $order->update_meta_data('_didit_session_id', $this->block_session_id);
-    $order->save();
+    $this->attach_checkout_session($order, $this->block_session_id);
   }
 }
 

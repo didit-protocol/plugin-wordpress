@@ -1,0 +1,20 @@
+name: Plugin tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['7.4', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - run: php -l didit-verify.php && php -l uninstall.php
+      - run: php tests/test-shortcode-assets.php
+      - run: php tests/test-webhook-signature.php
+      - run: php tests/test-verification-authorization.php

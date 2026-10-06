@@ -2,9 +2,9 @@
 Contributors: alexdidit
 Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.1
+Stable tag: 0.3.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -13,6 +13,13 @@ Add identity verification to any WordPress page or WooCommerce checkout using Di
 == Description ==
 
 Didit Verify lets you require identity verification on your WordPress site. Drop a shortcode on any page or require it at WooCommerce checkout.
+
+**Secure checkout and content access:**
+
+API Session mode is required for checkout and content gating.
+The plugin creates a session for the current visitor and confirms its decision with Didit before granting access.
+UniLink mode opens a flow for manual review and does not grant checkout or content access.
+After updating from 0.3.1 or earlier, users must verify again before protected content is available.
 
 **Two integration modes:**
 
@@ -203,6 +210,15 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 == Changelog ==
 
+= 0.3.2 =
+* Confirm verification decisions on the server before granting content or checkout access.
+* Bind sessions to their originating visitor or order and reject unrelated session IDs.
+* Require confirmed approval for both classic and block WooCommerce checkout.
+* Load verification scripts when checkout blocks are embedded on a custom page.
+* Show confirmation, review and retry states without trusting browser-reported decisions.
+* Refresh default button styling and keyboard focus visibility.
+
+
 = 0.3.1 =
 * Page builders that render shortcode content outside the post content (for example Oxygen) no longer show an unstyled verification button or embedded container. The plugin stylesheet and the button appearance CSS are now always queued in the header, while the SDK script is still enqueued when the shortcode itself renders.
 * Webhook receiver now verifies `X-Signature-V2` first, falls back to the legacy `X-Signature`, and finally to `X-Signature-Simple`. A delivery is accepted as soon as one variant verifies, so a reverse proxy, CDN rule or security plugin that strips a single `X-*` header no longer causes a 401 "Missing or stale webhook signature".
@@ -268,6 +284,10 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.3.2 =
+Security update: use API Session mode for protected content and checkout. Existing users must verify again. Browser-reported approvals from earlier releases no longer grant access.
+
 
 = 0.3.0 =
 Customizable checkout copy, German translations, and per-product verification scope for WooCommerce.

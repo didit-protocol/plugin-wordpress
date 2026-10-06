@@ -15,6 +15,15 @@ Identity verification for WordPress & WooCommerce using the [Didit SDK](https://
 | **Product scope** | Require verification for all products, only selected products, or all except selected |
 | **Secure** | API key stays server-side; CSRF nonce + rate limiting on session endpoint |
 
+## Verification decisions
+
+Use **API Session** mode for content gating and WooCommerce checkout.
+UniLink is for launching a flow and reviewing the result manually in Didit.
+The server binds each created session to its visitor or order, and retrieves the Didit decision before accepting a browser completion or checkout request.
+Only `Approved` grants access; errors, `In Review`, `Declined`, expired sessions and unrelated IDs do not.
+Signed webhooks update only sessions created by this site.
+After upgrading from 0.3.1 or earlier, existing users need to verify again because earlier browser-reported approvals are not trusted.
+
 ## Third-Party Service
 
 This plugin connects to the [Didit](https://didit.me) identity verification service. When a verification session is created (API mode), the plugin sends data to Didit's servers. The verification UI loads in an iframe from `verify.didit.me`.
@@ -44,7 +53,7 @@ Open <http://localhost:8080> and complete the WordPress setup wizard.
 
 **Settings → Didit Verify**
 
-#### UniLink mode (simplest)
+#### UniLink mode (manual review)
 
 1. Set **Mode** to `UniLink`
 2. Paste your UniLink URL (from [Didit Console](https://business.didit.me) → Workflow → Copy Link)
@@ -83,9 +92,9 @@ Customize the verification button from **Settings → Didit Verify → Button Ap
 |---------|---------|-------------|
 | **Button Text** | "Verify your Identity" | Label before verification |
 | **Success Text** | "Identity Verified ✓" | Label after verification |
-| **Background Color** | `#2667ff` | Button background |
+| **Background Color** | `#111111` | Button background |
 | **Text Color** | `#ffffff` | Button text |
-| **Border Radius** | `8px` | Corner rounding (0 = square, 50 = pill) |
+| **Border Radius** | `999px` | Corner rounding (0 = square, 999 = pill) |
 | **Padding** | `12px × 24px` | Vertical × horizontal |
 | **Font Size** | `16px` | Button font size |
 
@@ -185,7 +194,7 @@ Fields left empty use the default text, which follows the site language — Germ
 The verification box appears on the **order confirmation page** (classic and block themes), the **My Account → order view**, and a verification link is added to **customer order emails**. Works for **guest customers** too — the order key authenticates the request, no login needed.
 
 - Sessions are created server-side from the order's billing data and **reused** across clicks/reloads (no duplicate sessions, no wasted rate limit).
-- **Hold Orders** (optional): orders stay **On hold** until the Didit webhook confirms approval, then move to **Processing** automatically. Requires the Webhook Secret to be configured — the browser alone never releases a held order.
+- **Hold Orders** (optional): orders stay **On hold** until Didit confirms approval through the decision API or a signed webhook, then move to **Processing** automatically. Requires the Webhook Secret to be configured — the browser alone never releases a held order.
 - **Reminders** (optional): email customers who haven't verified, every N days, capped at a maximum per order. Scheduled with Action Scheduler (ships with WooCommerce). Reminders stop on approval/decline or when the order is cancelled/refunded.
 
 #### Webhooks (recommended)
@@ -301,7 +310,7 @@ wordpress-plugin/
 
 ```
 User clicks button → JS calls DiditSdk.startVerification({ url }) → Modal opens
-→ User completes verification → onComplete fires → Button shows "Verified"
+→ User completes verification → onComplete fires → Show submitted message for manual review
 ```
 
 ### API Flow
@@ -311,10 +320,11 @@ User clicks button
 → JS sends POST /wp-json/didit/v1/session with:
     X-WP-Nonce (CSRF)  +  billing data (if WC checkout)
 → PHP checks: nonce ✓ → login ✓ → rate limit ✓
-→ PHP calls Didit API with API key (server-side) → returns { url }
+→ PHP calls Didit API with API key (server-side) → binds session to visitor → returns { url, sessionId }
 → JS calls DiditSdk.startVerification({ url }) → modal opens
-→ User completes → onComplete fires → button shows "Verified"
-→ JS sends POST /wp-json/didit/v1/verify → saves result to user meta
+→ User completes → onComplete fires → JS requests server confirmation
+→ PHP checks the binding and retrieves the Didit decision
+→ Only a server-confirmed Approved decision shows "Verified"
 ```
 
 ### WooCommerce Flow
@@ -324,37 +334,24 @@ Same as above, plus:
 → Billing data (name, email, phone, address) auto-sent as expected_details
 → Country code converted from alpha-2 to alpha-3 automatically
 → Session ID written to hidden checkout field
-→ On "Place Order", PHP validates the field is not empty
+→ On "Place Order", PHP validates ownership and retrieves the current Didit decision
+→ Checkout proceeds only for Approved
 → Session ID saved to order meta (_didit_session_id)
 → Visible in admin order screen
 ```
 
 ## Security
 
-The plugin acts as a **secure backend proxy** between the browser and the Didit API. A hacker cannot create sessions directly — every request goes through multiple security layers:
+The API key stays on the server.
+Session creation requires a WordPress REST nonce and applies login settings and rate limits.
+Guest checkout and valid after-purchase order links can start verification without a WordPress login.
+A nonce is not proof of identity, and expected details from the browser are inputs to verification rather than authorization.
 
-| # | Layer | What it prevents |
-|---|-------|-----------------|
-| 1 | **CSRF nonce** | Cross-site request forgery. Request must originate from a page served by WordPress. |
-| 2 | **Require login** | Anonymous abuse. Only registered WordPress users can create sessions (configurable, **ON by default**). |
-| 3 | **Per-user rate limit** | Logged-in users: max **10 sessions/hour** per user. |
-| 4 | **Per-IP rate limit** | Guests (if login not required): max **3 sessions/hour** per IP. |
-| 5 | **API key server-only** | Key extraction. The Didit API key is in `wp_options` (database), never in HTML/JS. |
-| 6 | **Input sanitization** | Injection. All fields are whitelisted and sanitized. Metadata from the server (`wp_user_id`, `wp_ip`) can never be overwritten by the frontend. |
-
-### Why `expected_details` from the frontend is safe
-
-The `expected_details` (name, country, address) are sent from the checkout form. A hacker could theoretically modify them — but this **only hurts themselves**: Didit compares these against the real identity document. Fake expected details → verification **fails**. They can't use this to pass verification.
-
-### Attack scenario analysis
-
-| Attack | Protection |
-|--------|-----------|
-| Hacker scripts mass session creation from another site | **Layer 1**: nonce rejected (wrong origin) |
-| Hacker scripts mass creation from the WordPress site | **Layer 3/4**: rate limited to 10/hour per user, 3/hour per IP for guests. |
-| Hacker creates a bot that reloads + creates sessions | **Layer 2**: must be logged in. **Layer 3**: 10/hour max per user. **Layer 4**: 3/hour per IP if guest. |
-| Hacker sends fake billing data | **Safe**: only hurts their own verification (document won't match). |
-| Hacker tries to extract the API key | **Layer 5**: key is only in the database, never in any response or HTML. |
+The server records ownership when it creates a session.
+Completion requests and checkout validation require that binding and a matching decision retrieved from Didit.
+A browser-supplied status, arbitrary session ID or signed webhook metadata cannot assign a session to another visitor or order.
+Only a known session and authenticated status update can update protected access.
+API outages and unknown decisions fail closed.
 
 ## Customization
 
@@ -391,13 +388,14 @@ When a user completes verification, the plugin saves these fields to WordPress u
 |----------|-------|-------------|
 | `_didit_verified` | `1` | User is verified |
 | `_didit_session_id` | UUID | Didit session ID |
+| `_didit_confirmed_session_id` | UUID | Session whose status was confirmed by the server |
 | `_didit_status` | `Approved` / `Pending` / `Declined` | Verification result |
 | `_didit_verified_at` | datetime | When verification was completed |
 
 You can query this in PHP:
 
 ```php
-$is_verified = get_user_meta($user_id, '_didit_verified', true);
+$is_verified = Didit_Verify::init()->is_user_verified($user_id);
 ```
 
 A **Didit** column appears in the admin Users list showing a green checkmark for verified users and a dash for unverified.
@@ -436,12 +434,12 @@ document.addEventListener('didit:complete', function (e) {
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | `POST` | `/wp-json/didit/v1/session` | Create a verification session | CSRF nonce + login, or order key (after-purchase) |
-| `POST` | `/wp-json/didit/v1/verify` | Save verification result to user/order meta | Login, or order key (after-purchase) |
+| `POST` | `/wp-json/didit/v1/verify` | Confirm the bound session with Didit and update its status | REST nonce and browser/user binding, or a valid order key |
 | `POST` | `/wp-json/didit/v1/webhook` | Didit webhook receiver (`status.updated`) | HMAC-SHA256 signature (`X-Signature-V2` → `X-Signature` → `X-Signature-Simple`) + timestamp |
 
 ## Uninstall
 
-When the plugin is deleted via the WordPress admin, `uninstall.php` removes all plugin options from the database. User meta (`_didit_verified`, etc.) is preserved so verification status is not lost.
+When the plugin is deleted via the WordPress admin, `uninstall.php` removes all plugin options from the database. The plugin also removes its user verification metadata and session bindings.
 
 ## Install WooCommerce (for testing)
 
@@ -469,3 +467,10 @@ python3 tests/generate-fixtures.py > tests/fixtures/webhook-signatures.json
 ## License
 
 GPL-2.0-or-later — Copyright © 2025 Didit.
+
+## Tests
+
+Run `php tests/test-shortcode-assets.php`, `php tests/test-webhook-signature.php` and `php tests/test-verification-authorization.php`.
+The local end-to-end fixture in `tests/e2e/fixture-api.php` intercepts Didit HTTP calls only when `WP_ENVIRONMENT_TYPE` is `local`.
+It must never be installed on a production site.
+The release was also checked through actual WordPress REST requests, classic WooCommerce checkout and the Store API checkout with synthetic customers and upstream decisions.

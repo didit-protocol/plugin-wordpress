@@ -176,6 +176,11 @@ echo "\n== rest_webhook end to end ==\n";
 
 $GLOBALS['didit_test_options']['didit_webhook_secret'] = $SECRET;
 $GLOBALS['didit_test_users'] = [42 => $fixtures['session_id']];
+$GLOBALS['didit_test_user_meta']['42|_didit_pending_session_id'] = $fixtures['session_id'];
+update_option('didit_bound_' . hash('sha256', $fixtures['session_id']), [
+  'owner' => 'test-owner', 'user_id' => 42, 'order_id' => 0, 'event_timestamp' => 0,
+], 86400);
+
 
 $response = handle($fresh['body'], $request_headers);
 ok(is_array($response) && !empty($response['received']), 'full delivery is accepted');
@@ -185,7 +190,7 @@ ok(
 );
 
 // The regression the old handler produced: X-Signature stripped by a proxy -> 401.
-$GLOBALS['didit_test_user_meta'] = [];
+$GLOBALS['didit_test_user_meta'] = ['42|_didit_pending_session_id' => $fixtures['session_id']];
 $response = handle($fresh['body'], $simple_only);
 ok(is_array($response) && !empty($response['received']), 'envelope-only delivery is accepted, not 401');
 ok(
@@ -194,7 +199,7 @@ ok(
 );
 
 // X-Signature-Simple leaves metadata unsigned, so it must not steer the update.
-$GLOBALS['didit_test_user_meta'] = [];
+$GLOBALS['didit_test_user_meta'] = ['42|_didit_pending_session_id' => $fixtures['session_id']];
 $GLOBALS['didit_test_users'] = [42 => $fixtures['session_id'], 1 => 'some-other-session'];
 $spoofed_payload = $fresh['payload'];
 $spoofed_payload['metadata'] = ['wp_user_id' => 1];
@@ -211,8 +216,8 @@ ok(
   'the stored mapping wins over unsigned metadata'
 );
 
-// Signed deliveries keep honouring metadata.wp_user_id, as before.
-$GLOBALS['didit_test_user_meta'] = [];
+// Even signed metadata must not move an approval to a different user.
+$GLOBALS['didit_test_user_meta'] = ['42|_didit_pending_session_id' => $fixtures['session_id']];
 $GLOBALS['didit_test_users'] = [7 => 'unrelated-session'];
 $signed = freshen($fixtures['cases']['basic_approved'], $SECRET);
 $signed_payload = $signed['payload'];
@@ -220,8 +225,8 @@ $signed_payload['metadata'] = ['wp_user_id' => 7];
 $resigned = freshen(['body' => json_encode($signed_payload, JSON_UNESCAPED_SLASHES)], $SECRET);
 $response = handle($resigned['body'], $resigned['headers']);
 ok(
-  ($GLOBALS['didit_test_user_meta']['7|_didit_status'] ?? null) === 'Approved',
-  'signed delivery still routes by metadata.wp_user_id'
+  !isset($GLOBALS['didit_test_user_meta']['7|_didit_status']),
+  'signed metadata cannot override the server-created binding'
 );
 
 // Freshness.
