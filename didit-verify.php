@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.2
+ * Version:     0.3.3
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.2');
+define('DIDIT_VERIFY_VERSION', '0.3.3');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -180,6 +180,9 @@ final class Didit_Verify
 
   public function admin_enqueue_scripts($hook)
   {
+    if (in_array($hook, ['settings_page_didit-verify', 'users.php', 'post.php', 'post-new.php', 'woocommerce_page_wc-orders'], true)) {
+      wp_enqueue_style('didit-admin', DIDIT_VERIFY_URL . 'assets/css/didit-admin.css', [], DIDIT_VERIFY_VERSION);
+    }
     if ('settings_page_didit-verify' !== $hook) {
       return;
     }
@@ -235,7 +238,7 @@ final class Didit_Verify
       '<input type="password" name="didit_api_key" value="%s" class="regular-text" autocomplete="off" />
 			<p class="description">%s</p>',
       esc_attr(get_option('didit_api_key', '')),
-      esc_html__('Found in Didit Console → API & Webhooks. Stored server-side only — never sent to the browser.', 'didit-verify')
+      esc_html__('Found in Didit Console → API & Webhooks. Used by your WordPress server to create and confirm sessions. Keep it private.', 'didit-verify')
     );
   }
 
@@ -765,16 +768,42 @@ final class Didit_Verify
       return;
     }
     ?>
-    <div class="wrap">
-      <h1><?php esc_html_e('Didit Identity Verification', 'didit-verify'); ?></h1>
+    <div class="wrap didit-admin">
+      <header class="didit-admin-header">
+        <img class="didit-admin-logo" src="<?php echo esc_url(DIDIT_VERIFY_URL . 'assets/didit-wordmark.svg'); ?>" alt="Didit" width="104" height="36" />
+        <div>
+          <h1><?php esc_html_e('Identity verification', 'didit-verify'); ?></h1>
+          <p><?php esc_html_e('Connect your workflow, customize verification, and manage customer access.', 'didit-verify'); ?></p>
+        </div>
+        <a class="button" href="https://docs.didit.me/integration/web-sdks/wordpress-woocommerce" target="_blank" rel="noopener noreferrer"><?php esc_html_e('Documentation', 'didit-verify'); ?></a>
+      </header>
+      <hr class="wp-header-end" />
+      <div class="didit-admin-results">
+        <div><h2><?php esc_html_e('Verification results', 'didit-verify'); ?></h2>
+        <p><?php esc_html_e('See customer status in Users and session decisions on WooCommerce orders. Open Didit Console for the full verification report.', 'didit-verify'); ?></p></div>
+        <div class="didit-admin-actions">
+          <?php if (current_user_can('list_users')) : ?><a class="button" href="<?php echo esc_url(admin_url('users.php')); ?>"><?php esc_html_e('View users', 'didit-verify'); ?></a><?php endif; ?>
+          <a class="button" href="https://business.didit.me" target="_blank" rel="noopener noreferrer"><?php esc_html_e('Open Didit Console', 'didit-verify'); ?></a>
+        </div>
+      </div>
       <form method="post" action="options.php">
         <?php
         settings_fields('didit_verify');
-        do_settings_sections('didit-verify');
+        global $wp_settings_sections;
+        foreach ($wp_settings_sections['didit-verify'] ?? [] as $section) {
+          echo '<section class="didit-admin-card" aria-labelledby="' . esc_attr($section['id']) . '">';
+          echo '<h2 id="' . esc_attr($section['id']) . '">' . esc_html($section['title']) . '</h2>';
+          if ($section['callback']) {
+            call_user_func($section['callback'], $section);
+          }
+          echo '<table class="form-table" role="presentation">';
+          do_settings_fields('didit-verify', $section['id']);
+          echo '</table></section>';
+        }
         submit_button();
         ?>
       </form>
-      <hr />
+      <section class="didit-admin-card">
       <h3><?php esc_html_e('Shortcodes', 'didit-verify'); ?></h3>
       <code>[didit_verify]</code>
       <p class="description">
@@ -793,6 +822,7 @@ final class Didit_Verify
       <p class="description">
         <?php esc_html_e('Content inside is only visible to verified users. Others see a verification prompt.', 'didit-verify'); ?>
       </p>
+      </section>
     </div>
     <?php
   }
@@ -2055,18 +2085,27 @@ final class Didit_Verify
     if ('Approved' === $status) {
       /* translators: %s: date when user was verified */
       $title = $date ? sprintf(__('Verified on %s', 'didit-verify'), $date) : __('Approved', 'didit-verify');
-      return '<span style="color:#41D97F;font-size:1.2em;" title="' . esc_attr($title) . '">&#10004;</span>';
+      return $this->admin_status_badge($status, $title);
     }
     if ('Declined' === $status) {
+      /* translators: %s: date when the verification was declined */
       $title = $date ? sprintf(__('Declined on %s', 'didit-verify'), $date) : __('Declined', 'didit-verify');
-      return '<span style="color:#FF4141;font-size:1.2em;" title="' . esc_attr($title) . '">&#10008;</span>';
+      return $this->admin_status_badge($status, $title);
     }
     if ($status) {
-      $title = $date ? sprintf(__('In review since %s', 'didit-verify'), $date) : __('In Review', 'didit-verify');
-      return '<span style="color:#F59E0B;font-size:1.2em;" title="' . esc_attr($title) . '">&#9202;</span>';
+      /* translators: %s: date when the verification status was last updated */
+      $title = $date ? sprintf(__('Updated on %s', 'didit-verify'), $date) : $status;
+      return $this->admin_status_badge($status, $title);
     }
 
-    return '<span style="color:#9ca3af;" title="' . esc_attr__('Not verified', 'didit-verify') . '">&#8212;</span>';
+    return $this->admin_status_badge('');
+  }
+
+  private function admin_status_badge($status, $title = '')
+  {
+    $styles = ['Approved' => 'approved', 'Declined' => 'declined', 'In Review' => 'review'];
+    $label = $status ?: __('Not verified', 'didit-verify');
+    return '<span class="didit-admin-status didit-admin-status-' . esc_attr($styles[$status] ?? 'pending') . '" title="' . esc_attr($title ?: $label) . '">' . esc_html($label) . '</span>';
   }
 
   public function wc_hooks()
@@ -2189,10 +2228,10 @@ final class Didit_Verify
     if ($session_id) {
       $status = (string) $this->confirmed_order_status($order);
       printf(
-        '<p><strong>%s</strong> %s%s</p>',
+        '<div class="didit-admin-order"><strong>%s</strong> %s<code>%s</code></div>',
         esc_html__('Didit Verification:', 'didit-verify'),
-        esc_html($session_id),
-        $status ? ' — ' . esc_html($status) : ''
+        $this->admin_status_badge($status), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
+        esc_html($session_id)
       );
     }
   }

@@ -17,6 +17,10 @@ Identity verification for WordPress & WooCommerce using the [Didit SDK](https://
 
 ## Verification decisions
 
+The plugin settings use Didit branding and grouped configuration cards.
+WordPress administrators see readable decision badges in **Users → Didit** and on WooCommerce order details.
+The settings page links to both user results and the Didit Console, where the full verification report is available.
+
 Use **API Session** mode for content gating and WooCommerce checkout.
 UniLink is for launching a flow and reviewing the result manually in Didit.
 The server binds each created session to its visitor or order, and retrieves the Didit decision before accepting a browser completion or checkout request.
