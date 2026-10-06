@@ -10,6 +10,7 @@
 
 define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
+define('DAY_IN_SECONDS', 86400);
 
 // Options the handler reads. Tests overwrite entries directly.
 $GLOBALS['didit_test_options'] = [
@@ -128,9 +129,24 @@ class Didit_Test_Request {
   }
 
   public function get_body() { return $this->body; }
+  public function get_json_params() { return json_decode($this->body, true); }
 
   public function get_header($name) {
     $name = strtolower(str_replace('-', '_', $name));
     return isset($this->headers[$name]) ? $this->headers[$name] : null;
   }
 }
+
+$GLOBALS['didit_test_transients'] = [];
+$GLOBALS['didit_test_current_user'] = 42;
+function get_transient($key) { return $GLOBALS['didit_test_transients'][$key] ?? false; }
+function set_transient($key, $value, $expiry) { $GLOBALS['didit_test_transients'][$key] = $value; }
+function get_user_meta($id, $key, $single = true) { return $GLOBALS['didit_test_user_meta'][$id . '|' . $key] ?? ''; }
+function get_current_user_id() { return $GLOBALS['didit_test_current_user']; }
+function is_user_logged_in() { return get_current_user_id() > 0; }
+function is_wp_error($value) { return $value instanceof WP_Error; }
+function wp_remote_get($url, $args) { $GLOBALS['didit_test_api_calls'][] = $url; return $GLOBALS['didit_test_api_response']; }
+function wp_remote_retrieve_response_code($response) { return $response['response']['code']; }
+function wp_remote_retrieve_body($response) { return $response['body']; }
+
+function update_option($key, $value, $autoload = null) { $GLOBALS['didit_test_options'][$key] = $value; }

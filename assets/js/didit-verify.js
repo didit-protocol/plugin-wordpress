@@ -7,65 +7,101 @@
   var DiditSdk = window.DiditSDK.DiditSdk;
   var i18n = cfg.i18n || {};
 
-  DiditSdk.shared.onComplete = function (result) {
-    var status = result.session ? result.session.status : "";
+  var activeButton = null;
+  var pendingResult = null;
 
-    document.querySelectorAll(".didit-verify-btn").forEach(function (btn) {
-      btn.classList.remove("didit-verified", "didit-declined", "didit-in-review");
-
-      if (result.type === "completed" && status === "Approved") {
-        btn.textContent = btn.dataset.success || "Verified";
-        btn.classList.add("didit-verified");
-        btn.disabled = true;
-      } else if (result.type === "completed" && status === "Declined") {
-        btn.textContent = btn.dataset.text || "Verify Identity";
-        btn.disabled = false;
-      } else if (result.type === "completed") {
-        btn.textContent = i18n.inReview || "Verification In Review";
-        btn.classList.add("didit-in-review");
-        btn.disabled = true;
-      } else {
-        btn.textContent = btn.dataset.text || "Verify Identity";
-        btn.disabled = false;
-      }
-    });
-
-    var hidden = document.getElementById("didit_session_id");
-    if (hidden && result.session && result.session.sessionId) {
-      hidden.value = result.type === "completed" ? result.session.sessionId : "";
+  function feedback(btn, message, isError) {
+    var node = btn.parentNode.querySelector('.didit-feedback');
+    if (!node) {
+      node = document.createElement('p');
+      node.className = 'didit-feedback';
+      node.setAttribute('role', 'status');
+      node.setAttribute('aria-live', 'polite');
+      btn.insertAdjacentElement('afterend', node);
     }
+    node.textContent = message;
+    node.classList.toggle('didit-feedback-error', !!isError);
+  }
 
+  function setCheckoutSession(sessionId) {
+    var hidden = document.getElementById('didit_session_id');
+    if (hidden) hidden.value = sessionId;
     if (window.wp && window.wp.data && window.wp.data.dispatch) {
       try {
-        wp.data.dispatch("wc/store/checkout").setExtensionData("didit-verify", {
-          sessionId: result.type === "completed" && result.session ? result.session.sessionId : ""
-        });
-      } catch (e) {}
+        wp.data.dispatch('wc/store/checkout').setExtensionData('didit-verify', { sessionId: sessionId });
+      } catch (e) { /* Classic checkout has no Blocks data store. */ }
     }
+  }
 
-    if (cfg.restUrl && cfg.nonce) {
-      var verifyBody = {
-        type: result.type,
-        sessionId: result.session ? result.session.sessionId : "",
-        status: result.session ? result.session.status : ""
-      };
-      var orderBtn = document.querySelector(".didit-verify-btn[data-order-id]");
-      if (orderBtn) {
-        verifyBody.order_id = orderBtn.dataset.orderId;
-        verifyBody.order_key = orderBtn.dataset.orderKey || "";
+  function confirmResult(result, btn) {
+    btn.textContent = i18n.confirming || 'Confirming verification…';
+    btn.disabled = true;
+    setCheckoutSession('');
+    var body = { type: 'completed', sessionId: result.session ? result.session.sessionId : '' };
+    if (btn.dataset.orderId) {
+      body.order_id = btn.dataset.orderId;
+      body.order_key = btn.dataset.orderKey || '';
+    }
+    return fetch(cfg.restUrl.replace('/session', '/verify'), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.nonce },
+      body: JSON.stringify(body)
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) {
+          var error = new Error(data.message || i18n.confirmationError || 'Unable to confirm verification. Please try again.');
+          error.code = data.code;
+          throw error;
+        }
+        return data;
+      });
+    }).then(function (data) {
+      btn.classList.remove('didit-verified', 'didit-in-review');
+      if (data.status === 'Approved') {
+        btn.textContent = btn.dataset.success || 'Verified';
+        btn.classList.add('didit-verified');
+        btn.disabled = true;
+        pendingResult = null;
+        setCheckoutSession(data.sessionId);
+        feedback(btn, i18n.approved || 'Identity verified. You can continue.', false);
+      } else if (data.status === 'Declined' || data.status === 'Expired' || data.status === 'KYC Expired') {
+        pendingResult = null;
+        resetBtn(btn);
+        feedback(btn, data.status === 'Declined' ? (i18n.declined || 'Verification declined. Please try again.') : (i18n.expired || 'Verification expired. Please start again.'), true);
+      } else {
+        pendingResult = result;
+        btn.textContent = i18n.checkStatus || 'Check status';
+        btn.disabled = false;
+        feedback(btn, i18n.inReview || 'Your verification is being reviewed. Check again shortly.', false);
       }
-      fetch(cfg.restUrl.replace("/session", "/verify"), {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "Content-Type": "application/json",
-          "X-WP-Nonce": cfg.nonce
-        },
-        body: JSON.stringify(verifyBody)
-      }).catch(function () {});
-    }
+      document.dispatchEvent(new CustomEvent('didit:complete', { detail: { type: 'completed', session: { sessionId: data.sessionId, status: data.status } } }));
+    }).catch(function (error) {
+      pendingResult = result;
+      btn.textContent = i18n.checkStatus || 'Check status';
+      btn.disabled = false;
+      if (error.code === 'didit_session_mismatch') {
+        pendingResult = null;
+        resetBtn(btn);
+      }
+      feedback(btn, error.message, true);
+    });
+  }
 
-    document.dispatchEvent(new CustomEvent("didit:complete", { detail: result }));
+  DiditSdk.shared.onComplete = function (result) {
+    var btn = activeButton;
+    if (!btn) return;
+    if (result.type !== 'completed') {
+      pendingResult = null;
+      setCheckoutSession('');
+      resetBtn(btn);
+      return;
+    }
+    if (cfg.mode === 'unilink' && !btn.dataset.wc) {
+      resetBtn(btn);
+      feedback(btn, i18n.submitted || 'Verification submitted. Your result is available from the service provider.', false);
+      return;
+    }
+    confirmResult(result, btn);
   };
 
   function getWcBillingData() {
@@ -132,9 +168,16 @@
     if (!btn || btn.disabled || btn.classList.contains("didit-verified")) return;
 
     e.preventDefault();
+    if (pendingResult && activeButton === btn) {
+      confirmResult(pendingResult, btn);
+      return;
+    }
+    activeButton = btn;
+    pendingResult = null;
     btn.disabled = true;
+    feedback(btn, '', false);
 
-    if (cfg.mode === "unilink") {
+    if (cfg.mode === "unilink" && !btn.dataset.wc) {
       startSdk(cfg.unilinkUrl, btn);
     } else {
       btn.textContent = i18n.creatingSession || "Creating session\u2026";
@@ -169,7 +212,7 @@
           startSdk(data.url, btn);
         })
         .catch(function (err) {
-          alert((i18n.verificationError || "Verification error:") + " " + err.message);
+          feedback(btn, err.message, true);
           resetBtn(btn);
         });
     }
