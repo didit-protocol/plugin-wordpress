@@ -1,0 +1,71 @@
+{
+  "secret": "wh_test_secret_9f2c4b8e1a7d",
+  "timestamp": 1774970000,
+  "session_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "cases": {
+    "basic_approved": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"decision\":{\"id_verifications\":[{\"node_id\":\"id_verification_1\",\"status\":\"Approved\",\"warnings\":[]}],\"reviews\":[],\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\"},\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"metadata\":{\"wp_user_id\":42},\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "c8abe0c1a9e1e8325e83b789f4d1c398a3c9a5cd727424b642d4a93036be8977",
+        "v2": "c8abe0c1a9e1e8325e83b789f4d1c398a3c9a5cd727424b642d4a93036be8977",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "unicode_names": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"decision\":{\"id_verifications\":[{\"first_name\":\"Jos\\u00e9\",\"last_name\":\"M\\u00fcller-\\u00dcnl\\u00fc\",\"node_id\":\"id_verification_1\",\"place_of_birth\":\"\\u5317\\u4eac\",\"status\":\"Approved\"}],\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\"},\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "b7b49a28ae4118438ef4d0f0fd603c4387cc39adf3ed451da18dc521c1d3e7eb",
+        "v2": "7e416d66763a1f7e228ab0d94677f87152ad58560f0c71e8db7eb6b16faf7009",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "empty_objects": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"decision\":{\"reviews\":[],\"risk_view\":{\"countries\":{\"risk_scores\":{}},\"crimes\":{\"risk_scores\":{}},\"custom_list\":{}},\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\"},\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"metadata\":{},\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "413856e88122d544ad3aeebd48d05b2aa322aba01cd057fe40038bbe4417a1ab",
+        "v2": "413856e88122d544ad3aeebd48d05b2aa322aba01cd057fe40038bbe4417a1ab",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "slashes_in_urls": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"decision\":{\"id_verifications\":[{\"front_image\":\"https://media.didit.me/sessions/abc/front.jpg?sig=a/b+c\",\"node_id\":\"id_verification_1\"}],\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\"},\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "f6e69e9b8df6930ca47970e31eb1d9cc499e80acd77253269bef908ac2a07dff",
+        "v2": "f6e69e9b8df6930ca47970e31eb1d9cc499e80acd77253269bef908ac2a07dff",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "float_scores": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"decision\":{\"face_matches\":[{\"node_id\":\"face_match_1\",\"score\":96.15,\"threshold\":0}],\"liveness_checks\":[{\"node_id\":\"liveness_1\",\"score\":95.4,\"threshold\":100}],\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\"},\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "44bc5a7be5137ee5ea7f58ed7471724c1fbeb496ea4672c46a898172e710bbfa",
+        "v2": "44bc5a7be5137ee5ea7f58ed7471724c1fbeb496ea4672c46a898172e710bbfa",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "numeric_like_keys": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"metadata\":{\"10\":\"ten\",\"2\":\"two\",\"9\":\"nine\",\"wp_user_id\":42},\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "814093217ff957aba2147b407873f704d0b09553e2861dd870f8eb09aafcef19",
+        "v2": "814093217ff957aba2147b407873f704d0b09553e2861dd870f8eb09aafcef19",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "mixed_types": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"decision\":{\"expiration_date\":null,\"is_sandbox\":false,\"nfc_available\":true,\"reviews\":[],\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"warnings\":[{\"risk\":\"b\"},{\"risk\":\"a\"}]},\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Approved\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "7684b0af2983b3bdd613999ecb443f79e0ff99a2438bd5ba53257aec7ac8f303",
+        "v2": "7684b0af2983b3bdd613999ecb443f79e0ff99a2438bd5ba53257aec7ac8f303",
+        "simple": "d831dd64f6c1801e214d9c114fe24167baee695a879404771d3d5dbfb10fdf75"
+      }
+    },
+    "declined": {
+      "body": "{\"application_id\":\"11111111-2222-3333-4444-555555555555\",\"created_at\":1774969994,\"environment\":\"live\",\"event_id\":\"9c0c8b8a-1111-4222-9333-444444444444\",\"metadata\":{\"wp_user_id\":42},\"session_id\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"status\":\"Declined\",\"timestamp\":1774970000,\"vendor_data\":\"wp-42\",\"webhook_type\":\"status.updated\",\"workflow_id\":\"22222222-3333-4444-5555-666666666666\",\"workflow_version\":4}",
+      "signatures": {
+        "raw": "1b132d6284727cc34cb259add34355e547fe103c65475a8d6286462edf909b63",
+        "v2": "1b132d6284727cc34cb259add34355e547fe103c65475a8d6286462edf909b63",
+        "simple": "ea157dba351b4c0f93fdaacd85059d494fd7696b3993c7a6707c2593d0fb4c74"
+      }
+    }
+  }
+}
