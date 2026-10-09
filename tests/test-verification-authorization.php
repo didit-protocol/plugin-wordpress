@@ -61,4 +61,40 @@ $record['event_timestamp'] = time();
 internal('store_session', $id, $record);
 internal('apply_confirmed_status', $id, $record, 'Approved', time() - 60);
 check('Not Started' === internal('stored_session', $id)['status'], 'older signed delivery cannot overwrite newer state');
+
+// A second attempt must not prevent revocation of the session granting access.
+$pending_id = 'bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee';
+$secret = 'test-only-webhook-secret';
+$GLOBALS['didit_test_options']['didit_webhook_secret'] = $secret;
+function signed_status($id, $status, $timestamp) {
+  $body = json_encode(['session_id' => $id, 'status' => $status,
+    'timestamp' => $timestamp, 'webhook_type' => 'status.updated']);
+  return Didit_Verify::init()->rest_webhook(new Didit_Test_Request($body, [
+    'X-Signature' => hash_hmac('sha256', $body, $GLOBALS['didit_test_options']['didit_webhook_secret']),
+  ]));
+}
+foreach (['Declined', 'Expired', 'KYC Expired', 'In Review'] as $status) {
+  $record['event_timestamp'] = time() - 2;
+  $record['status'] = 'Approved';
+  internal('store_session', $id, $record);
+  $GLOBALS['didit_test_user_meta']['42|_didit_session_id'] = $id;
+  $GLOBALS['didit_test_user_meta']['42|_didit_confirmed_session_id'] = $id;
+  $GLOBALS['didit_test_user_meta']['42|_didit_status'] = 'Approved';
+  $GLOBALS['didit_test_user_meta']['42|_didit_verified'] = 1;
+  $GLOBALS['didit_test_user_meta']['42|_didit_pending_session_id'] = $pending_id;
+  signed_status($id, $status, time());
+  check(!Didit_Verify::init()->is_user_verified(42), "$status revokes the current approval while another session is pending");
+  check($status === internal('confirmed_user_status', 42), "$status is displayed on the user after revocation");
+  check('' === get_user_meta(42, '_didit_verified', true), "$status clears the verified flag");
+}
+$record['event_timestamp'] = 0;
+$record['status'] = 'Not Started';
+internal('store_session', $pending_id, $record);
+signed_status($pending_id, 'Approved', time());
+check(Didit_Verify::init()->is_user_verified(42), 'the new pending session can approve the user');
+signed_status($id, 'Declined', time() + 1);
+check(Didit_Verify::init()->is_user_verified(42), 'a superseded session cannot revoke the new approval');
+check($pending_id === get_user_meta(42, '_didit_confirmed_session_id', true), 'a superseded session cannot replace the active session');
+signed_status($pending_id, 'Declined', time() - 1);
+check(Didit_Verify::init()->is_user_verified(42), 'an older revocation cannot overwrite a newer approval');
 echo "$passed passed\n";
