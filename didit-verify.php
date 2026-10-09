@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.3
+ * Version:     0.3.4
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.3');
+define('DIDIT_VERIFY_VERSION', '0.3.4');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
@@ -1165,7 +1165,11 @@ final class Didit_Verify
     $record['event_timestamp'] = $timestamp;
     $this->store_session($session_id, $record);
     $user_id = (int) $record['user_id'];
-    if ($user_id && (string) get_user_meta($user_id, '_didit_pending_session_id', true) === $session_id) {
+    // A new attempt must not prevent revocation of the session still granting access.
+    if ($user_id && (
+      (string) get_user_meta($user_id, '_didit_pending_session_id', true) === $session_id
+      || (string) get_user_meta($user_id, '_didit_confirmed_session_id', true) === $session_id
+    )) {
       update_user_meta($user_id, '_didit_session_id', $session_id);
       update_user_meta($user_id, '_didit_confirmed_session_id', $session_id);
       update_user_meta($user_id, '_didit_status', $status);
@@ -1194,7 +1198,12 @@ final class Didit_Verify
     if (!$session_id || $session_id !== (string) get_user_meta($user_id, '_didit_session_id', true)) {
       return '';
     }
-    return (string) get_user_meta($user_id, '_didit_status', true);
+    // Read the recorded decision so a revocation received before an upgrade also applies.
+    $record = $this->stored_session($session_id);
+    if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== (int) $user_id) {
+      return '';
+    }
+    return $this->normalize_status($record['status'] ?? '');
   }
 
   public function is_user_verified($user_id): bool

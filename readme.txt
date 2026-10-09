@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.3
+Stable tag: 0.3.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -210,6 +210,10 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 
 == Changelog ==
 
+= 0.3.4 =
+* Security: revoke protected-content access when the approved verification is declined, expires, or returns to review, even if another verification has started.
+* Keep a newer approved verification unaffected by updates to an older session.
+
 = 0.3.3 =
 * Add Didit branding and grouped cards to the WordPress settings page.
 * Show readable verification status badges in Users and WooCommerce order details.
@@ -289,6 +293,9 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.3.4 =
+Security update for protected content: revocations now apply to the verification granting access even when another attempt is pending.
 
 = 0.3.3 =
 Branded administration and clearer verification results. Includes the server-confirmed approval protections introduced in 0.3.2.
