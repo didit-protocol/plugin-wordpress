@@ -97,4 +97,13 @@ check(Didit_Verify::init()->is_user_verified(42), 'a superseded session cannot r
 check($pending_id === get_user_meta(42, '_didit_confirmed_session_id', true), 'a superseded session cannot replace the active session');
 signed_status($pending_id, 'Declined', time() - 1);
 check(Didit_Verify::init()->is_user_verified(42), 'an older revocation cannot overwrite a newer approval');
+// Version 0.3.3 could already have recorded a revocation without updating user meta.
+$revoked_record = internal('stored_session', $pending_id);
+$revoked_record['status'] = 'Declined';
+internal('store_session', $pending_id, $revoked_record);
+check(!Didit_Verify::init()->is_user_verified(42), 'an existing recorded revocation overrides stale approval metadata after upgrade');
+$revoked_record['status'] = 'Approved';
+$revoked_record['user_id'] = 7;
+internal('store_session', $pending_id, $revoked_record);
+check(!Didit_Verify::init()->is_user_verified(42), 'another user\'s session cannot supply the current approval');
 echo "$passed passed\n";

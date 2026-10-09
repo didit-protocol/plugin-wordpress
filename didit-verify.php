@@ -1198,7 +1198,12 @@ final class Didit_Verify
     if (!$session_id || $session_id !== (string) get_user_meta($user_id, '_didit_session_id', true)) {
       return '';
     }
-    return (string) get_user_meta($user_id, '_didit_status', true);
+    // Read the recorded decision so a revocation received before an upgrade also applies.
+    $record = $this->stored_session($session_id);
+    if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== (int) $user_id) {
+      return '';
+    }
+    return $this->normalize_status($record['status'] ?? '');
   }
 
   public function is_user_verified($user_id): bool
