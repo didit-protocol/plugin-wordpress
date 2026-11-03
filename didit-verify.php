@@ -2229,6 +2229,17 @@ final class Didit_Verify
     $product->update_meta_data('_didit_verify', isset($_POST['_didit_verify']) ? 'yes' : 'no');
   }
 
+  /**
+   * Extra attributes the frontend needs to render this button outside a frame.
+   */
+  private function button_attributes(bool $is_embedded): string
+  {
+    if ($is_embedded) {
+      return ' data-container="didit-wc-embed"';
+    }
+    return 'redirect' === get_option('didit_display_mode', 'modal') ? ' data-display="redirect"' : '';
+  }
+
   public function wc_checkout_field()
   {
     if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
@@ -2238,6 +2249,7 @@ final class Didit_Verify
     <?php
     $this->enqueue_sdk_assets();
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
+    $button_attrs = $this->button_attributes($is_embedded);
     $btn_text = $this->btn_text();
     $btn_success = $this->btn_success_text();
     ?>
@@ -2247,8 +2259,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" <?php if ($is_embedded)
-             echo ' data-container="didit-wc-embed"'; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" <?php echo $button_attrs; ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <input type="hidden" name="didit_session_id" id="didit_session_id" value="" />
@@ -2373,6 +2384,7 @@ final class Didit_Verify
 
     $this->enqueue_sdk_assets();
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
+    $button_attrs = $this->button_attributes($is_embedded);
     $btn_text = $this->btn_text();
     $btn_success = $this->btn_success_text();
 
@@ -2389,7 +2401,7 @@ final class Didit_Verify
       esc_attr($btn_success),
       absint($order->get_id()),
       esc_attr($order->get_order_key()),
-      $is_embedded ? ' data-container="didit-wc-embed"' : '',
+      $button_attrs,
       esc_html($btn_text),
       $is_embedded ? '<div class="didit-embed-container" id="didit-wc-embed"></div>' : ''
     );
@@ -2531,6 +2543,7 @@ final class Didit_Verify
 
     $this->enqueue_sdk_assets();
     $is_embedded = ('embedded' === get_option('didit_display_mode', 'modal'));
+    $button_attrs = $this->button_attributes($is_embedded);
     $btn_text = $this->btn_text();
     $btn_success = $this->btn_success_text();
 
@@ -2542,8 +2555,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1"<?php if ($is_embedded)
-             echo ' data-container="didit-wc-embed"'; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1"<?php echo $button_attrs; ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <?php if ($is_embedded): ?>
