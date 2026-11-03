@@ -18,3 +18,5 @@ jobs:
       - run: php tests/test-shortcode-assets.php
       - run: php tests/test-webhook-signature.php
       - run: php tests/test-verification-authorization.php
+      - run: php tests/test-checkout-retry.php
+      - run: php tests/test-redirect-fallback.php
