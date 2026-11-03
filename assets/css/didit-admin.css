@@ -1,0 +1,58 @@
+.didit-admin {
+  --didit-ink: #111111;
+  --didit-muted: #616161;
+  --didit-line: #e5e5e5;
+  --didit-surface: #ffffff;
+  max-width: 1120px;
+  color: var(--didit-ink);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.didit-admin-header { display: flex; align-items: center; gap: 28px; padding: 28px 0; }
+.didit-admin-logo { width: 104px; height: 36px; flex: 0 0 auto; }
+.didit-admin-header > div { flex: 1; }
+.didit-admin .didit-admin-header h1 { font-size: 25px; font-weight: 500; line-height: 1.3; padding: 0; }
+.didit-admin p { color: var(--didit-muted); line-height: 1.6; }
+.didit-admin-header p { margin: 8px 0 0; }
+.didit-admin-results, .didit-admin-card {
+  background: var(--didit-surface);
+  border: 1px solid var(--didit-line);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin: 0 0 20px;
+}
+.didit-admin-results { display: flex; align-items: center; gap: 24px; }
+.didit-admin-results > div:first-child { flex: 1; }
+.didit-admin-results h2, .didit-admin-card h2 { margin: 0; font-size: 17px; font-weight: 500; }
+.didit-admin-results p { margin: 8px 0 0; }
+.didit-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.didit-admin .button { border: 1px solid var(--didit-line); border-radius: 999px; background: var(--didit-surface); color: var(--didit-ink); padding: 5px 16px; font-weight: 500; white-space: nowrap; }
+.didit-admin .button:hover { border-color: var(--didit-ink); }
+.didit-admin .button-primary { background: var(--didit-ink); color: var(--didit-surface); border-color: var(--didit-ink); padding: 8px 24px; }
+.didit-admin .button:focus-visible, .didit-admin input:focus-visible, .didit-admin select:focus-visible { outline: 2px solid #2567ff; outline-offset: 3px; box-shadow: none; }
+.didit-admin .form-table { margin-top: 12px; }
+.didit-admin .form-table th { color: var(--didit-ink); font-weight: 500; padding: 20px 24px 20px 0; }
+.didit-admin .form-table td { padding: 18px 0; }
+.didit-admin .form-table tr + tr { border-top: 1px solid var(--didit-line); }
+.didit-admin .form-table input:not([type=checkbox]):not([type=color]), .didit-admin .form-table select { border-color: #b8b8b8; border-radius: 8px; padding: 5px 10px; max-width: 100%; background-color: var(--didit-surface); color: var(--didit-ink); }
+.didit-admin .form-table select { padding-right: 28px; }
+.didit-admin .form-table .description { font-size: 12px; margin-top: 8px; }
+.didit-admin .notice { border-radius: 8px; }
+.didit-admin-status { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 1.5; background: #f0f0f0; color: #555; white-space: nowrap; }
+.didit-admin-status-approved { background: #e7f5ed; color: #166534; }
+.didit-admin-status-declined { background: #fdecec; color: #991b1b; }
+.didit-admin-status-review { background: #fff4dc; color: #854d0e; }
+.didit-admin-order { margin-top: 16px; padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fff; color: #111; }
+.didit-admin-order strong { display: inline-block; margin: 0 8px 8px 0; }
+.didit-admin-order code { display: block; overflow-wrap: anywhere; font-size: 11px; margin-top: 8px; }
+@media (max-width: 960px) {
+  .didit-admin-header { flex-wrap: wrap; gap: 20px; }
+  .didit-admin-header > div { flex-basis: calc(100% - 124px); }
+  .didit-admin-results { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 782px) {
+  .didit-admin-card, .didit-admin-results { padding: 20px; }
+  .didit-admin .form-table th { padding: 16px 0 0; }
+  .didit-admin .form-table td { padding: 8px 0 16px; }
+  .didit-admin-header .didit-admin-logo { width: 86px; height: auto; }
+  .didit-admin .didit-admin-header h1 { font-size: 21px; }
+}
