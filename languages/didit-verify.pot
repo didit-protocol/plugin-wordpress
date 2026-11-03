@@ -287,7 +287,7 @@ msgid "Modal opens a centered overlay. Embedded renders the verification directl
 msgstr ""
 
 #: didit-verify.php:391
-msgid "Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit's page; set the Callback URL under Session so they come back to the shop."
+msgid "Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit's page and returns to the page where they started."
 msgstr ""
 
 #: didit-verify.php:396
