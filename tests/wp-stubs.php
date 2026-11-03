@@ -47,6 +47,8 @@ function current_time() { return '2026-03-31 12:00:00'; }
 function shortcode_atts($pairs, $atts) { return array_merge($pairs, (array) $atts); }
 function selected($a, $b, $echo = true) { $out = ((string) $a === (string) $b) ? ' selected="selected"' : ''; if ($echo) { echo $out; } return $out; }
 function apply_filters($hook, $value) { return $value; }
+function home_url($path = '') { return 'https://example.test/' . ltrim($path, '/'); }
+function wp_parse_url($url, $component = -1) { return parse_url($url, $component); }
 function rest_url($path = '') { return 'https://example.test/wp-json/' . ltrim($path, '/'); }
 function wp_create_nonce($action) { return 'test-nonce-' . $action; }
 
@@ -149,8 +151,13 @@ function set_transient($key, $value, $expiry) { $GLOBALS['didit_test_transients'
 function get_user_meta($id, $key, $single = true) { return $GLOBALS['didit_test_user_meta'][$id . '|' . $key] ?? ''; }
 function get_current_user_id() { return $GLOBALS['didit_test_current_user']; }
 function is_user_logged_in() { return get_current_user_id() > 0; }
+function wp_get_current_user() { return (object) ['ID' => get_current_user_id(), 'user_email' => 'user' . get_current_user_id() . '@example.test']; }
 function is_wp_error($value) { return $value instanceof WP_Error; }
-function wp_remote_get($url, $args) { $GLOBALS['didit_test_api_calls'][] = $url; return $GLOBALS['didit_test_api_response']; }
+function wp_remote_get($url, $args) {
+  $GLOBALS['didit_test_api_calls'][] = $url;
+  $response = $GLOBALS['didit_test_api_response'] ?? null;
+  return is_callable($response) ? $response($url, $args) : $response;
+}
 function wp_remote_post($url, $args = []) {
   $GLOBALS['didit_test_api_posts'][] = ['url' => $url, 'args' => $args];
   $handler = $GLOBALS['didit_test_post_response'] ?? null;

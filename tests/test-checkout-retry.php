@@ -47,10 +47,24 @@ function store($session_id, array $record)
   $method->invoke(Didit_Verify::init(), $session_id, $record);
 }
 
-function start_attempt()
+function start_attempt(array $input = [])
 {
-  return Didit_Verify::init()->rest_create_session(new Didit_Test_Request('{}'));
+  return Didit_Verify::init()->rest_create_session(new Didit_Test_Request($input ? json_encode($input) : '{}'));
 }
+
+// What Didit currently says about each session, as its decision endpoint reports it.
+$GLOBALS['didit_remote_status'] = [];
+$GLOBALS['didit_test_api_response'] = function ($url) {
+  if (!empty($GLOBALS['didit_decision_unavailable'])) {
+    return ['response' => ['code' => 503], 'body' => '{}'];
+  }
+  preg_match('#/session/([^/]+)/decision/#', $url, $m);
+  $id = rawurldecode($m[1] ?? '');
+  return ['response' => ['code' => 200], 'body' => json_encode([
+    'session_id' => $id,
+    'status' => $GLOBALS['didit_remote_status'][$id] ?? 'Not Started',
+  ])];
+};
 
 function reset_attempts($owner_seed, $ip)
 {
@@ -109,6 +123,66 @@ store($open_id, $record);
 $renewed = start_attempt();
 ok(is_array($renewed) && ($renewed['sessionId'] ?? '') !== $open_id,
   'an approved session is not reused for a new verification');
+
+// Didit ended the session but the webhook never reached the shop (this shop's webhooks returned 401).
+foreach (['Abandoned', 'Expired'] as $i => $final) {
+  reset_attempts((string) ($i + 1), '198.51.100.3' . $i);
+  $dead = start_attempt();
+  $dead_id = $dead['sessionId'] ?? '';
+  $GLOBALS['didit_remote_status'][$dead_id] = $final;
+  $after = start_attempt();
+  ok(is_array($after) && !empty($after['sessionId']) && $after['sessionId'] !== $dead_id,
+    "a session Didit reports as {$final} is not reopened, even without its webhook");
+  $dead_record = stored($dead_id);
+  ok($final === ($dead_record['status'] ?? ''), "the {$final} status Didit reported is recorded");
+  $again = start_attempt();
+  ok(($again['sessionId'] ?? '') === ($after['sessionId'] ?? 'x'), "the replacement for an {$final} session is the one reopened next");
+}
+
+// A webhook already recorded the session as abandoned.
+reset_attempts('5', '198.51.100.40');
+$abandoned = start_attempt();
+$abandoned_id = $abandoned['sessionId'] ?? '';
+$record = stored($abandoned_id);
+$record['status'] = 'Abandoned';
+store($abandoned_id, $record);
+$calls = count($GLOBALS['didit_test_api_calls'] ?? []);
+$fresh = start_attempt();
+ok(is_array($fresh) && ($fresh['sessionId'] ?? '') !== $abandoned_id, 'a session recorded as Abandoned is not reopened');
+ok(count($GLOBALS['didit_test_api_calls'] ?? []) === $calls, 'a session already recorded as finished is not looked up again');
+
+// When Didit cannot say whether the session is still open, start a new one rather than guess.
+reset_attempts('6', '198.51.100.41');
+$unknown = start_attempt();
+$GLOBALS['didit_decision_unavailable'] = true;
+$retry = start_attempt();
+$GLOBALS['didit_decision_unavailable'] = false;
+ok(is_array($retry) && ($retry['sessionId'] ?? '') !== ($unknown['sessionId'] ?? ''),
+  'a session whose status cannot be confirmed is not reopened');
+
+// A guest session carries no account; after logging in the shopper needs one tied to their user.
+reset_attempts('7', '198.51.100.42');
+$guest = start_attempt();
+$GLOBALS['didit_test_current_user'] = 42;
+$member = start_attempt();
+ok(is_array($member) && ($member['sessionId'] ?? '') !== ($guest['sessionId'] ?? ''),
+  'a guest session is not reopened once the shopper has logged in');
+ok(42 === (int) (stored($member['sessionId'] ?? '')['user_id'] ?? 0), 'the new session belongs to the logged-in shopper');
+$GLOBALS['didit_test_current_user'] = 0;
+
+// Redirect returns the shopper to the page they left, never to another site.
+reset_attempts('8', '198.51.100.43');
+$GLOBALS['didit_test_api_posts'] = [];
+start_attempt(['return_url' => 'https://example.test/checkout/?step=2']);
+$sent = json_decode($GLOBALS['didit_test_api_posts'][0]['args']['body'] ?? '{}', true);
+ok('https://example.test/checkout/?step=2' === ($sent['callback'] ?? ''), 'a redirected session returns to the page it started from');
+reset_attempts('9', '198.51.100.44');
+$GLOBALS['didit_test_options']['didit_callback_url'] = 'https://example.test/verification-done';
+$GLOBALS['didit_test_api_posts'] = [];
+start_attempt(['return_url' => 'https://attacker.example/phish']);
+$sent = json_decode($GLOBALS['didit_test_api_posts'][0]['args']['body'] ?? '{}', true);
+ok('https://example.test/verification-done' === ($sent['callback'] ?? ''), 'a return address on another site is ignored');
+unset($GLOBALS['didit_test_options']['didit_callback_url']);
 
 // Creation stays limited: a client that keeps ending up in a closed session still hits the cap.
 reset_attempts('e', '198.51.100.24');

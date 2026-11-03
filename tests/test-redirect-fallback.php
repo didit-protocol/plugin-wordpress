@@ -44,9 +44,19 @@ ok('redirect' === ($config['displayMode'] ?? ''), 'the redirect mode reaches the
 
 // 3. In redirect mode the flow must run on the hosted page, not inside a frame.
 $script = (string) file_get_contents(__DIR__ . '/../assets/js/didit-verify.js');
-ok((bool) preg_match('/displayMode\s*===\s*["\']redirect["\']/', $script)
+ok((bool) preg_match('/dataset\.display\s*===\s*["\']redirect["\']/', $script)
   && (bool) preg_match('/location\.(assign|replace|href)/', $script),
-  'the frontend continues on the hosted page in redirect mode');
+  'the frontend continues on the hosted page for a redirect button');
+ok(!preg_match('/cfg\.displayMode/', $script), 'the site-wide mode does not override the mode a button was rendered with');
+
+// The per-shortcode override documented in the readme works both ways.
+$GLOBALS['didit_test_options']['didit_display_mode'] = 'redirect';
+ok(false === strpos($plugin->render_shortcode(['mode' => 'modal']), 'data-display="redirect"'),
+  'a shortcode with mode="modal" stays in place when the site uses Redirect');
+$GLOBALS['didit_test_options']['didit_display_mode'] = 'modal';
+ok(false !== strpos($plugin->render_shortcode(['mode' => 'redirect']), 'data-display="redirect"'),
+  'a shortcode with mode="redirect" redirects when the site uses Modal');
+$GLOBALS['didit_test_options']['didit_display_mode'] = 'redirect';
 
 // 4. The WooCommerce checkout button - the screen this customer is stuck on - asks for it too.
 $GLOBALS['didit_test_options']['didit_wc_mode'] = 'checkout';

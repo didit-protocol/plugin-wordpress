@@ -44,10 +44,23 @@
       try {
         var current = new URL(window.location.href);
         if (current.searchParams.has("verificationSessionId")) {
-          current.searchParams.delete("verificationSessionId");
-          window.history.replaceState({}, "", current.toString());
+          window.history.replaceState({}, "", pageUrl());
         }
       } catch (e) { /* older browser, the parameter is harmless */ }
+    }
+  }
+
+  // This page without the parameters Didit appends on the way back.
+  function pageUrl() {
+    try {
+      var current = new URL(window.location.href);
+      if (current.searchParams.has("verificationSessionId")) {
+        current.searchParams.delete("verificationSessionId");
+        current.searchParams.delete("status");
+      }
+      return current.toString();
+    } catch (e) {
+      return window.location.href;
     }
   }
 
@@ -72,40 +85,8 @@
       forgetSession();
       return;
     }
-
-    var body = { type: "completed", sessionId: sessionId };
-    if (btn.dataset.orderId) {
-      body.order_id = btn.dataset.orderId;
-      body.order_key = btn.dataset.orderKey || "";
-    }
     activeButton = btn;
-    btn.disabled = true;
-
-    fetch(cfg.restUrl.replace("/session", "/verify"), {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-WP-Nonce": cfg.nonce },
-      body: JSON.stringify(body)
-    }).then(function (response) {
-      return response.json().then(function (data) {
-        if (!response.ok) throw new Error(data.message || "Error " + response.status);
-        return data;
-      });
-    }).then(function (data) {
-      forgetSession();
-      if (data.status === "Approved") {
-        btn.textContent = btn.dataset.success || "Verified";
-        btn.classList.add("didit-verified");
-        btn.disabled = true;
-        setCheckoutSession(data.sessionId || sessionId);
-        feedback(btn, i18n.approved || "Identity verified. You can continue.", false);
-      } else {
-        resetBtn(btn);
-      }
-    }).catch(function () {
-      forgetSession();
-      resetBtn(btn);
-    });
+    confirmResult({ type: "completed", session: { sessionId: sessionId } }, btn).then(forgetSession, forgetSession);
   }
 
   function confirmResult(result, btn) {
@@ -139,7 +120,7 @@
         pendingResult = null;
         setCheckoutSession(data.sessionId);
         feedback(btn, i18n.approved || 'Identity verified. You can continue.', false);
-      } else if (data.status === 'Declined' || data.status === 'Expired' || data.status === 'KYC Expired') {
+      } else if (data.status === 'Declined' || data.status === 'Abandoned' || data.status === 'Expired' || data.status === 'KYC Expired') {
         pendingResult = null;
         resetBtn(btn);
         feedback(btn, data.status === 'Declined' ? (i18n.declined || 'Verification declined. Please try again.') : (i18n.expired || 'Verification expired. Please start again.'), true);
@@ -265,6 +246,9 @@
         requestBody.order_id = btn.dataset.orderId;
         requestBody.order_key = btn.dataset.orderKey || "";
       }
+      if (btn.dataset.display === "redirect") {
+        requestBody.return_url = pageUrl();
+      }
 
       fetch(cfg.restUrl, {
         method: "POST",
@@ -299,7 +283,8 @@
   }
 
   function startSdk(url, btn, sessionId) {
-    if (btn.dataset.display === "redirect" || cfg.displayMode === "redirect") {
+    // The server marks every redirect button, so a shortcode's own mode always wins.
+    if (btn.dataset.display === "redirect") {
       // The hosted page is the only place a blocked camera can recover the flow.
       if (sessionId) rememberSession(sessionId);
       window.location.assign(url);

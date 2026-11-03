@@ -388,7 +388,7 @@ final class Didit_Verify
       selected($v, 'redirect', false),
       esc_html__('Redirect — opens the hosted verification page in the browser', 'didit-verify'),
       esc_html__('Modal opens a centered overlay. Embedded renders the verification directly on the page where you placed [didit_verify] or the WooCommerce checkout section.', 'didit-verify'),
-      esc_html__('Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit\'s page; set the Callback URL under Session so they come back to the shop.', 'didit-verify')
+      esc_html__('Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit\'s page and returns to the page where they started.', 'didit-verify')
     );
   }
 
@@ -924,6 +924,11 @@ final class Didit_Verify
     if ($vendor_data) {
       $body['vendor_data'] = $vendor_data;
     }
+    // A redirected shopper comes back to the page they left, where the plugin can pick up the result.
+    $return_url = $this->same_site_url($input['return_url'] ?? '');
+    if ($return_url) {
+      $callback_url = $return_url;
+    }
     if ($callback_url) {
       $body['callback'] = $callback_url;
     }
@@ -1070,6 +1075,21 @@ final class Didit_Verify
     return rest_ensure_response(['url' => $url, 'sessionId' => $session_id]);
   }
 
+  private function same_site_url($url): string
+  {
+    if (!is_string($url) || '' === $url) {
+      return '';
+    }
+    $url = esc_url_raw($url);
+    $scheme = strtolower((string) wp_parse_url($url, PHP_URL_SCHEME));
+    $host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+    $site_host = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+    if (!in_array($scheme, ['http', 'https'], true) || '' === $host || $host !== $site_host) {
+      return '';
+    }
+    return $url;
+  }
+
   private function valid_session_id($session_id): bool
   {
     return is_string($session_id) && 1 === preg_match('/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i', $session_id);
@@ -1095,13 +1115,9 @@ final class Didit_Verify
     return 'didit_resume_' . $owner;
   }
 
-  private function session_is_open(array $record): bool
+  private function status_is_open(string $status): bool
   {
-    return !in_array(
-      $this->normalize_status((string) ($record['status'] ?? '')),
-      ['Approved', 'Declined', 'Expired', 'KYC Expired'],
-      true
-    );
+    return in_array($this->normalize_status($status), ['Not Started', 'In Progress', 'In Review'], true);
   }
 
   /**
@@ -1121,7 +1137,11 @@ final class Didit_Verify
 
     foreach (array_unique(array_filter($candidates)) as $session_id) {
       $record = $this->stored_session($session_id);
-      if (!is_array($record) || !$this->session_belongs_to_request($record, $order) || !$this->session_is_open($record)) {
+      if (!is_array($record) || !$this->session_belongs_to_request($record, $order) || !$this->status_is_open((string) ($record['status'] ?? ''))) {
+        continue;
+      }
+      // A guest session carries no account, so after logging in the visitor needs one that does.
+      if (!$order && (int) $record['user_id'] !== get_current_user_id()) {
         continue;
       }
       $url = (string) ($record['url'] ?? '');
@@ -1129,6 +1149,16 @@ final class Didit_Verify
         $url = (string) $order->get_meta('_didit_session_url');
       }
       if ('' === $url) {
+        continue;
+      }
+      // The stored status only moves when a webhook arrives, so ask Didit before reopening:
+      // an abandoned or expired session would otherwise be handed back on every retry.
+      $status = $this->fetch_decision_status($session_id);
+      if (is_wp_error($status)) {
+        continue;
+      }
+      if (!$this->status_is_open($status)) {
+        $this->apply_confirmed_status($session_id, $record, $status, time());
         continue;
       }
       return ['url' => $url, 'sessionId' => $session_id];
@@ -1189,6 +1219,19 @@ final class Didit_Verify
     if (!$this->session_belongs_to_request($record, $order)) {
       return new WP_Error('didit_session_mismatch', __('Start a new verification from this page.', 'didit-verify'), ['status' => 403]);
     }
+    $status = $this->fetch_decision_status($session_id);
+    if (is_wp_error($status)) {
+      return $status;
+    }
+    $this->apply_confirmed_status($session_id, $record, $status, time());
+    return $status;
+  }
+
+  /**
+   * The status Didit currently holds for a session, read from the decision endpoint.
+   */
+  private function fetch_decision_status($session_id)
+  {
     $api_key = get_option('didit_api_key', '');
     if (!$api_key) {
       return new WP_Error('didit_not_configured', __('API Session mode is required to confirm verification.', 'didit-verify'), ['status' => 503]);
@@ -1205,7 +1248,6 @@ final class Didit_Verify
     if (!$status || ($data['session_id'] ?? '') !== $session_id) {
       return new WP_Error('didit_invalid_decision', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 502]);
     }
-    $this->apply_confirmed_status($session_id, $record, $status, time());
     return $status;
   }
 
