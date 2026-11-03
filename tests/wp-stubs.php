@@ -3,13 +3,15 @@
  * The smallest slice of WordPress the webhook handler touches, so the signature
  * verification can be exercised without a WordPress install.
  *
- * Only functions reached by rest_webhook() (and by loading didit-verify.php) are
- * stubbed; anything else is deliberately left undefined so an accidental new
- * dependency in the handler surfaces as a fatal error instead of passing silently.
+ * Only functions reached by rest_webhook() and rest_create_session() (and by
+ * loading didit-verify.php) are stubbed; anything else is deliberately left
+ * undefined so an accidental new dependency in a handler surfaces as a fatal
+ * error instead of passing silently.
  */
 
 define('ABSPATH', __DIR__ . '/');
 define('MINUTE_IN_SECONDS', 60);
+define('HOUR_IN_SECONDS', 3600);
 define('DAY_IN_SECONDS', 86400);
 
 // Options the handler reads. Tests overwrite entries directly.
@@ -43,6 +45,7 @@ function absint($value) { return abs((int) $value); }
 function sanitize_text_field($value) { return trim(strip_tags((string) $value)); }
 function current_time() { return '2026-03-31 12:00:00'; }
 function shortcode_atts($pairs, $atts) { return array_merge($pairs, (array) $atts); }
+function selected($a, $b, $echo = true) { $out = ((string) $a === (string) $b) ? ' selected="selected"' : ''; if ($echo) { echo $out; } return $out; }
 function apply_filters($hook, $value) { return $value; }
 function rest_url($path = '') { return 'https://example.test/wp-json/' . ltrim($path, '/'); }
 function wp_create_nonce($action) { return 'test-nonce-' . $action; }
@@ -138,6 +141,8 @@ class Didit_Test_Request {
 }
 
 $GLOBALS['didit_test_transients'] = [];
+$GLOBALS['didit_test_api_posts'] = [];
+$GLOBALS['didit_test_post_response'] = null;
 $GLOBALS['didit_test_current_user'] = 42;
 function get_transient($key) { return $GLOBALS['didit_test_transients'][$key] ?? false; }
 function set_transient($key, $value, $expiry) { $GLOBALS['didit_test_transients'][$key] = $value; }
@@ -146,7 +151,17 @@ function get_current_user_id() { return $GLOBALS['didit_test_current_user']; }
 function is_user_logged_in() { return get_current_user_id() > 0; }
 function is_wp_error($value) { return $value instanceof WP_Error; }
 function wp_remote_get($url, $args) { $GLOBALS['didit_test_api_calls'][] = $url; return $GLOBALS['didit_test_api_response']; }
+function wp_remote_post($url, $args = []) {
+  $GLOBALS['didit_test_api_posts'][] = ['url' => $url, 'args' => $args];
+  $handler = $GLOBALS['didit_test_post_response'] ?? null;
+  if (is_callable($handler)) {
+    return $handler($url, $args);
+  }
+  return ['response' => ['code' => 500], 'body' => '{}'];
+}
 function wp_remote_retrieve_response_code($response) { return $response['response']['code']; }
 function wp_remote_retrieve_body($response) { return $response['body']; }
+function wp_json_encode($data) { return json_encode($data); }
+function wp_unslash($value) { return is_string($value) ? stripslashes($value) : $value; }
 
 function update_option($key, $value, $autoload = null) { $GLOBALS['didit_test_options'][$key] = $value; }
