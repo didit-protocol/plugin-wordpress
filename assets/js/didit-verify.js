@@ -9,6 +9,7 @@
 
   var activeButton = null;
   var pendingResult = null;
+  var RESUME_KEY = "diditPendingSessionId";
 
   function feedback(btn, message, isError) {
     var node = btn.parentNode.querySelector('.didit-feedback');
@@ -31,6 +32,80 @@
         wp.data.dispatch('wc/store/checkout').setExtensionData('didit-verify', { sessionId: sessionId });
       } catch (e) { /* Classic checkout has no Blocks data store. */ }
     }
+  }
+
+  function rememberSession(sessionId) {
+    try { window.sessionStorage.setItem(RESUME_KEY, sessionId); } catch (e) { /* storage may be blocked */ }
+  }
+
+  function forgetSession() {
+    try { window.sessionStorage.removeItem(RESUME_KEY); } catch (e) { /* storage may be blocked */ }
+    if (window.history && window.history.replaceState) {
+      try {
+        var current = new URL(window.location.href);
+        if (current.searchParams.has("verificationSessionId")) {
+          current.searchParams.delete("verificationSessionId");
+          window.history.replaceState({}, "", current.toString());
+        }
+      } catch (e) { /* older browser, the parameter is harmless */ }
+    }
+  }
+
+  function returnedSessionId() {
+    var id = "";
+    try {
+      id = new URL(window.location.href).searchParams.get("verificationSessionId") || "";
+    } catch (e) { id = ""; }
+    if (!id) {
+      try { id = window.sessionStorage.getItem(RESUME_KEY) || ""; } catch (e) { id = ""; }
+    }
+    return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id) ? id : "";
+  }
+
+  // The shopper comes back from the hosted page: confirm what Didit decided and keep
+  // the checkout pointing at the same session, so the order carries the result.
+  function resumeReturnedSession() {
+    var sessionId = returnedSessionId();
+    if (!sessionId) return;
+    var btn = document.querySelector(".didit-verify-btn");
+    if (!btn || btn.classList.contains("didit-verified")) {
+      forgetSession();
+      return;
+    }
+
+    var body = { type: "completed", sessionId: sessionId };
+    if (btn.dataset.orderId) {
+      body.order_id = btn.dataset.orderId;
+      body.order_key = btn.dataset.orderKey || "";
+    }
+    activeButton = btn;
+    btn.disabled = true;
+
+    fetch(cfg.restUrl.replace("/session", "/verify"), {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-WP-Nonce": cfg.nonce },
+      body: JSON.stringify(body)
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data.message || "Error " + response.status);
+        return data;
+      });
+    }).then(function (data) {
+      forgetSession();
+      if (data.status === "Approved") {
+        btn.textContent = btn.dataset.success || "Verified";
+        btn.classList.add("didit-verified");
+        btn.disabled = true;
+        setCheckoutSession(data.sessionId || sessionId);
+        feedback(btn, i18n.approved || "Identity verified. You can continue.", false);
+      } else {
+        resetBtn(btn);
+      }
+    }).catch(function () {
+      forgetSession();
+      resetBtn(btn);
+    });
   }
 
   function confirmResult(result, btn) {
@@ -209,7 +284,7 @@
         })
         .then(function (data) {
           if (!data.url) throw new Error(i18n.noUrl || "No verification URL returned");
-          startSdk(data.url, btn);
+          startSdk(data.url, btn, data.sessionId);
         })
         .catch(function (err) {
           feedback(btn, err.message, true);
@@ -223,7 +298,14 @@
     btn.disabled = false;
   }
 
-  function startSdk(url, btn) {
+  function startSdk(url, btn, sessionId) {
+    if (btn.dataset.display === "redirect" || cfg.displayMode === "redirect") {
+      // The hosted page is the only place a blocked camera can recover the flow.
+      if (sessionId) rememberSession(sessionId);
+      window.location.assign(url);
+      return;
+    }
+
     var config = {
       showCloseButton: cfg.showCloseButton,
       showExitConfirmation: cfg.showExitConfirmation,
@@ -242,5 +324,11 @@
 
     DiditSdk.shared.startVerification({ url: url, configuration: config });
     btn.textContent = btn.dataset.text || "Verify Identity";
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", resumeReturnedSession);
+  } else {
+    resumeReturnedSession();
   }
 })();

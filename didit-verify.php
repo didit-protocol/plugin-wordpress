@@ -377,13 +377,18 @@ final class Didit_Verify
       '<select name="didit_display_mode">
         <option value="modal" %s>%s</option>
         <option value="embedded" %s>%s</option>
+        <option value="redirect" %s>%s</option>
       </select>
+      <p class="description">%s</p>
       <p class="description">%s</p>',
       selected($v, 'modal', false),
       esc_html__('Modal (popup) — opens over the page', 'didit-verify'),
       selected($v, 'embedded', false),
       esc_html__('Embedded (inline) — appears where the shortcode is placed', 'didit-verify'),
-      esc_html__('Modal opens a centered overlay. Embedded renders the verification directly on the page where you placed [didit_verify] or the WooCommerce checkout section.', 'didit-verify')
+      selected($v, 'redirect', false),
+      esc_html__('Redirect — opens the hosted verification page in the browser', 'didit-verify'),
+      esc_html__('Modal opens a centered overlay. Embedded renders the verification directly on the page where you placed [didit_verify] or the WooCommerce checkout section.', 'didit-verify'),
+      esc_html__('Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit\'s page; set the Callback URL under Session so they come back to the shop.', 'didit-verify')
     );
   }
 
@@ -886,6 +891,16 @@ final class Didit_Verify
 
   public function rest_create_session($request)
   {
+    $input = $request->get_json_params();
+    $order = $this->validate_order_context($input);
+
+    // Continuing the session this browser or order already has costs nothing, so a retry
+    // must not spend the visitor's creation budget or leave a duplicate session behind.
+    $resume = $this->resumable_session($order);
+    if ($resume) {
+      return rest_ensure_response($resume);
+    }
+
     $rate_error = $this->check_rate_limit();
     if (is_wp_error($rate_error)) {
       return $rate_error;
@@ -919,17 +934,6 @@ final class Didit_Verify
     $language = get_option('didit_language', 'auto');
     if ($language && 'auto' !== $language) {
       $body['language'] = $language;
-    }
-
-    $input = $request->get_json_params();
-
-    $order = $this->validate_order_context($input);
-    if ($order) {
-      $existing_url = $order->get_meta('_didit_session_url');
-      $existing_status = $this->confirmed_order_status($order);
-      if ($existing_url && $this->stored_session((string) $order->get_meta('_didit_session_id')) && !in_array($existing_status, ['Approved', 'Declined', 'Expired', 'KYC Expired'], true)) {
-        return rest_ensure_response(['url' => $existing_url]);
-      }
     }
 
     if (!empty($input['contact_details']) && is_array($input['contact_details'])) {
@@ -1040,7 +1044,9 @@ final class Didit_Verify
       'status' => 'Not Started',
       'event_timestamp' => 0,
       'consumed_order_id' => 0,
+      'url' => esc_url_raw($url),
     ]);
+    update_option($this->resume_key($owner), $session_id, false);
     if ($user_id) {
       update_user_meta($user_id, '_didit_pending_session_id', $session_id);
     }
@@ -1082,6 +1088,53 @@ final class Didit_Verify
   private function store_session($session_id, array $record)
   {
     update_option($this->session_key($session_id), $record, false);
+  }
+
+  private function resume_key(string $owner): string
+  {
+    return 'didit_resume_' . $owner;
+  }
+
+  private function session_is_open(array $record): bool
+  {
+    return !in_array(
+      $this->normalize_status((string) ($record['status'] ?? '')),
+      ['Approved', 'Declined', 'Expired', 'KYC Expired'],
+      true
+    );
+  }
+
+  /**
+   * The session this visitor can continue, if any. A retry returns it instead of
+   * creating another session, which is what kept Android shoppers locked out.
+   */
+  private function resumable_session($order = null)
+  {
+    $candidates = [];
+    $owner = $this->verification_owner();
+    if ('' !== $owner) {
+      $candidates[] = (string) get_option($this->resume_key($owner), '');
+    }
+    if ($order) {
+      $candidates[] = (string) $order->get_meta('_didit_session_id');
+    }
+
+    foreach (array_unique(array_filter($candidates)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if (!is_array($record) || !$this->session_belongs_to_request($record, $order) || !$this->session_is_open($record)) {
+        continue;
+      }
+      $url = (string) ($record['url'] ?? '');
+      if ('' === $url && $order) {
+        $url = (string) $order->get_meta('_didit_session_url');
+      }
+      if ('' === $url) {
+        continue;
+      }
+      return ['url' => $url, 'sessionId' => $session_id];
+    }
+
+    return null;
   }
 
   private function verification_owner(bool $create = false): string
@@ -1998,6 +2051,9 @@ final class Didit_Verify
     $is_embedded = ('embedded' === $display);
     $container_id = 'didit-embed-' . $instance;
     $container_attr = $is_embedded ? sprintf(' data-container="%s"', esc_attr($container_id)) : '';
+    if ('redirect' === $display) {
+      $container_attr .= ' data-display="redirect"';
+    }
 
     $embed_html = $is_embedded
       ? sprintf('<div class="didit-embed-container" id="%s"></div>', esc_attr($container_id))
