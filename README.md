@@ -132,7 +132,7 @@ This renders a verification button styled with your Button Appearance settings.
 [didit_verify mode="redirect"]
 ```
 
-Redirect opens the hosted verification page in the browser. Use it when the camera cannot start inside a frame — the liveness step on some Android Chrome devices, for example — and set the **Callback URL** under Session so shoppers come back to the shop. On return the plugin confirms the result on the server and keeps the checkout pointing at the same session.
+Redirect opens the hosted verification page in the browser. Use it when the camera cannot start inside a frame — the liveness step on some Android Chrome devices, for example — and shoppers come back to the page where they started. On return the plugin confirms the result on the server and keeps the checkout pointing at the same session.
 
 ### 7. Status & content gating
 
