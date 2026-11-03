@@ -1,0 +1,143 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Didit Verify 0.3.0\n"
+"Report-Msgid-Bugs-To: https://github.com/didit-protocol/plugin-wordpress/issues\n"
+"POT-Creation-Date: 2026-07-28 00:00+0000\n"
+"PO-Revision-Date: 2026-07-28 00:00+0000\n"
+"Last-Translator: Didit <hello@didit.me>\n"
+"Language-Team: Deutsch <hello@didit.me>\n"
+"Language: de_DE\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: didit-verify build script\n"
+
+#: didit-verify.php:453
+msgid "Verify your Identity"
+msgstr "Identität verifizieren"
+
+#: didit-verify.php:464
+msgid "Identity Verified ✓"
+msgstr "Identität verifiziert ✓"
+
+#: didit-verify.php:673
+msgid "Identity Verification"
+msgstr "Identitätsprüfung"
+
+#: didit-verify.php:678
+msgid "Please verify your identity before placing your order."
+msgstr "Bitte verifiziere deine Identität, bevor du deine Bestellung aufgibst."
+
+#: didit-verify.php:683
+msgid "Please verify your identity to complete your order."
+msgstr "Bitte verifiziere deine Identität, um deine Bestellung abzuschließen."
+
+#: didit-verify.php:811
+msgid "Invalid security token."
+msgstr "Ungültiges Sicherheitstoken."
+
+#: didit-verify.php:819
+msgid "You must be logged in to start verification."
+msgstr "Du musst angemeldet sein, um die Verifizierung zu starten."
+
+#: didit-verify.php:853
+msgid "Didit API credentials are not configured."
+msgstr "Die Didit-API-Zugangsdaten sind nicht konfiguriert."
+
+#: didit-verify.php:972
+msgid "Didit API error"
+msgstr "Didit-API-Fehler"
+
+#: didit-verify.php:981
+msgid "No verification URL returned."
+msgstr "Keine Verifizierungs-URL erhalten."
+
+#: didit-verify.php:1129
+msgid "Too many verification requests. Please try again later."
+msgstr "Zu viele Verifizierungsanfragen. Bitte versuche es später erneut."
+
+#: didit-verify.php:1554
+msgid "Creating session…"
+msgstr "Sitzung wird erstellt …"
+
+#: didit-verify.php:1555
+msgid "Verification In Review"
+msgstr "Verifizierung wird geprüft"
+
+#: didit-verify.php:1556
+msgid "Verification error:"
+msgstr "Verifizierungsfehler:"
+
+#: didit-verify.php:1557
+msgid "No verification URL returned"
+msgstr "Keine Verifizierungs-URL erhalten"
+
+#: didit-verify.php:1639
+msgid "Identity Verified"
+msgstr "Identität verifiziert"
+
+#: didit-verify.php:1640
+msgid "Not Verified"
+msgstr "Nicht verifiziert"
+
+#: didit-verify.php:1641
+msgid "Verification Declined"
+msgstr "Verifizierung abgelehnt"
+
+#: didit-verify.php:1643
+msgid "Please log in"
+msgstr "Bitte melde dich an"
+
+#: didit-verify.php:1668
+msgid "Please verify your identity to access this content."
+msgstr "Bitte verifiziere deine Identität, um auf diesen Inhalt zuzugreifen."
+
+#: didit-verify.php:1674
+msgid "Please log in to access this content."
+msgstr "Bitte melde dich an, um auf diesen Inhalt zuzugreifen."
+
+#: didit-verify.php:1686
+msgid "Your identity verification is being reviewed. Please check back shortly."
+msgstr "Deine Verifizierung wird derzeit geprüft. Bitte schau in Kürze wieder vorbei."
+
+#: didit-verify.php:1826
+msgid "Please complete identity verification before placing your order."
+msgstr "Bitte schließe die Identitätsprüfung ab, bevor du deine Bestellung aufgibst."
+
+#: didit-verify.php:1914
+msgid "Your identity has been verified. Thank you!"
+msgstr "Deine Identität wurde verifiziert. Vielen Dank!"
+
+#: didit-verify.php:1925
+msgid "Your verification is being reviewed. No further action is needed."
+msgstr "Deine Verifizierung wird geprüft. Es ist nichts weiter zu tun."
+
+#: didit-verify.php:1930
+msgid "Your previous verification attempt was declined. Please try again."
+msgstr "Dein letzter Verifizierungsversuch wurde abgelehnt. Bitte versuche es erneut."
+
+#: didit-verify.php:2003
+msgid "Please verify your identity to complete your order:"
+msgstr "Bitte verifiziere deine Identität, um deine Bestellung abzuschließen:"
+
+#: didit-verify.php:2011
+msgid "Identity verification required"
+msgstr "Identitätsprüfung erforderlich"
+
+#: didit-verify.php:2014
+msgid "Verify your identity"
+msgstr "Identität verifizieren"
+
+#: didit-verify.php:2054
+msgid "Action required: verify your identity for order #%s"
+msgstr "Aktion erforderlich: Verifiziere deine Identität für Bestellung #%s"
+
+#: didit-verify.php:2059
+msgid "Your order is waiting for identity verification. It only takes a couple of minutes."
+msgstr "Deine Bestellung wartet auf die Identitätsprüfung. Das dauert nur wenige Minuten."
+
+#: didit-verify.php:2061
+msgid "Verify your identity now"
+msgstr "Jetzt Identität verifizieren"
+
