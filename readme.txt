@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.4
+Stable tag: 0.3.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,6 +30,7 @@ After updating from 0.3.1 or earlier, users must verify again before protected c
 
 * **Modal** — opens a centered overlay on top of the page
 * **Embedded** — renders the verification inline where the shortcode is placed
+* **Redirect** — opens the hosted verification page in the browser, for devices whose camera cannot start inside a frame
 * Configurable close button, exit confirmation dialog, and auto-close on completion
 * Debug logging for SDK events in the browser console
 
@@ -209,6 +210,11 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 4. WooCommerce checkout with verification step.
 
 == Changelog ==
+
+= 0.3.5 =
+* Fix: retrying verification no longer creates another session and spend the visitor's hourly limit. The plugin reopens the session this browser (or this WooCommerce order) is already in, so a shopper can keep retrying until the flow completes. Approved, declined and expired sessions still start a new verification, and the creation limit still stops a runaway loop.
+* New Redirect display mode: the verification runs on Didit's hosted page instead of inside a frame, the way out of camera or liveness failures inside an iframe on Android Chrome. Set the Callback URL so the shopper returns to the shop; the plugin then confirms the result and keeps the checkout session.
+* When a shopper returns from the hosted page, the plugin confirms the result on the server and marks the checkout as soon as the session is approved.
 
 = 0.3.4 =
 * Security: revoke protected-content access when the approved verification is declined, expires, or returns to review, even if another verification has started.
