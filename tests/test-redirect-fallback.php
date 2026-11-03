@@ -48,5 +48,13 @@ ok((bool) preg_match('/displayMode\s*===\s*["\']redirect["\']/', $script)
   && (bool) preg_match('/location\.(assign|replace|href)/', $script),
   'the frontend continues on the hosted page in redirect mode');
 
+// 4. The WooCommerce checkout button - the screen this customer is stuck on - asks for it too.
+$GLOBALS['didit_test_options']['didit_wc_mode'] = 'checkout';
+ob_start();
+$plugin->wc_checkout_field();
+$checkout = ob_get_clean();
+ok(false !== strpos($checkout, 'data-display="redirect"') && false === strpos($checkout, 'didit-embed-container'),
+  'the WooCommerce checkout button uses the redirect mode and renders no frame');
+
 echo "\n{$passed} passed, {$failed} failed\n";
 exit($failed > 0 ? 1 : 0);

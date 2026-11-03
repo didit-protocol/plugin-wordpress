@@ -9,7 +9,7 @@ Identity verification for WordPress & WooCommerce using the [Didit SDK](https://
 | **Shortcode** | `[didit_verify]` — drop a verification button on any page |
 | **WooCommerce** | Require identity verification at checkout |
 | **Two modes** | **UniLink** (no backend, paste a URL) or **API** (unique sessions per user) |
-| **Display** | Modal (popup overlay) or Embedded (inline) |
+| **Display** | Modal (popup overlay), Embedded (inline) or Redirect (hosted page) |
 | **Customizable** | Button colors, text, padding, radius — all configurable with live preview. Checkout section title and messages editable too |
 | **Translatable** | All customer-facing text is translatable; German (`de_DE`, `de_DE_formal`) included |
 | **Product scope** | Require verification for all products, only selected products, or all except selected |
@@ -82,7 +82,7 @@ Configure how the verification UI appears:
 
 | Setting | Description |
 |---------|-------------|
-| **Display Mode** | Modal (popup overlay) or Embedded (inline where shortcode is placed) |
+| **Display Mode** | Modal (popup overlay), Embedded (inline where shortcode is placed) or Redirect (hosted verification page) |
 | **Close Button** | Show or hide the X button on the modal |
 | **Exit Confirmation** | "Are you sure?" dialog when closing the modal |
 | **Auto-close** | Automatically close the modal when verification completes |
@@ -125,6 +125,14 @@ This renders a verification button styled with your Button Appearance settings.
 ```
 [didit_verify mode="embedded"]
 ```
+
+**Redirect instead of embedding:**
+
+```
+[didit_verify mode="redirect"]
+```
+
+Redirect opens the hosted verification page in the browser. Use it when the camera cannot start inside a frame — the liveness step on some Android Chrome devices, for example — and set the **Callback URL** under Session so shoppers come back to the shop. On return the plugin confirms the result on the server and keeps the checkout pointing at the same session.
 
 ### 7. Status & content gating
 
@@ -276,7 +284,7 @@ All data is sanitized server-side before being sent to the Didit API.
 |-----------|---------|-------------|
 | `text` | Admin setting | Button label |
 | `success_text` | Admin setting | Label after verification |
-| `mode` | Admin setting | `modal` or `embedded` — override display mode |
+| `mode` | Admin setting | `modal`, `embedded` or `redirect` — override display mode |
 
 ### `[didit_status]`
 

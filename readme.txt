@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.4
+Stable tag: 0.3.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,6 +30,7 @@ After updating from 0.3.1 or earlier, users must verify again before protected c
 
 * **Modal** — opens a centered overlay on top of the page
 * **Embedded** — renders the verification inline where the shortcode is placed
+* **Redirect** — opens the hosted verification page in the browser, for devices whose camera cannot start inside a frame
 * Configurable close button, exit confirmation dialog, and auto-close on completion
 * Debug logging for SDK events in the browser console
 
@@ -195,11 +196,15 @@ Yes. Go to **Settings → Didit Verify → WooCommerce → Product Scope** and c
 
 Select products on the product edit page under **Product data → Advanced → Didit verification**. Mixed carts require verification whenever at least one product in the cart requires it. The scope applies to both checkout and after-purchase modes.
 
-= Can I switch between modal and embedded display? =
+= Can I switch between modal, embedded and redirect display? =
 
-Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. Choose Modal (popup overlay) or Embedded (inline where the shortcode is). You can also override per shortcode:
+Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. Choose Modal (popup overlay), Embedded (inline where the shortcode is) or Redirect (the hosted verification page in the browser). You can also override per shortcode:
 
 `[didit_verify mode="embedded"]`
+
+= When should I use Redirect display? =
+
+When the camera cannot start inside a frame, for example the liveness step on some Android Chrome devices. Redirect opens Didit's hosted page in the browser, so the camera runs at the top level. Set the **Callback URL** under Session to the page shoppers should return to, such as the checkout page; the plugin then confirms the result and keeps the checkout session.
 
 == Screenshots ==
 
@@ -209,6 +214,11 @@ Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. C
 4. WooCommerce checkout with verification step.
 
 == Changelog ==
+
+= 0.3.5 =
+* Fix: retrying verification no longer creates another session or spends the visitor's hourly limit. The plugin reopens the session this browser (or this WooCommerce order) is already in, so a shopper can keep retrying until the flow completes. Approved, declined and expired sessions still start a new verification, and the creation limit still stops a runaway loop.
+* New Redirect display mode: the verification runs on Didit's hosted page instead of inside a frame, the way out of camera or liveness failures inside an iframe on Android Chrome. Set the Callback URL so the shopper returns to the shop; the plugin then confirms the result and keeps the checkout session.
+* When a shopper returns from the hosted page, the plugin confirms the result on the server and marks the checkout as soon as the session is approved.
 
 = 0.3.4 =
 * Security: revoke protected-content access when the approved verification is declined, expires, or returns to review, even if another verification has started.
