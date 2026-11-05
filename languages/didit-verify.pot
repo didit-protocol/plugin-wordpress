@@ -270,16 +270,24 @@ msgstr ""
 msgid "Language for the verification UI shown to the user. Auto-detect uses the browser language."
 msgstr ""
 
-#: didit-verify.php:383
+#: didit-verify.php:385
 msgid "Modal (popup) — opens over the page"
 msgstr ""
 
-#: didit-verify.php:385
+#: didit-verify.php:387
 msgid "Embedded (inline) — appears where the shortcode is placed"
 msgstr ""
 
-#: didit-verify.php:386
+#: didit-verify.php:389
+msgid "Redirect — opens the hosted verification page in the browser"
+msgstr ""
+
+#: didit-verify.php:390
 msgid "Modal opens a centered overlay. Embedded renders the verification directly on the page where you placed [didit_verify] or the WooCommerce checkout section."
+msgstr ""
+
+#: didit-verify.php:391
+msgid "Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit's page and returns to the page where they started."
 msgstr ""
 
 #: didit-verify.php:396
