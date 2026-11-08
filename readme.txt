@@ -219,6 +219,7 @@ When the camera cannot start inside a frame, for example the liveness step on so
 * Fix: retrying verification no longer creates another session or spends the visitor's hourly limit. The plugin reopens the session this browser (or this WooCommerce order) is already in, so a shopper can keep retrying until the flow completes. Before reopening a session the plugin asks Didit for its current status, so approved, declined, abandoned and expired sessions start a new verification, and the creation limit still stops a runaway loop.
 * New Redirect display mode: the verification runs on Didit's hosted page instead of inside a frame, the way out of camera or liveness failures inside an iframe on Android Chrome. The shopper returns to the page where they started; the plugin then confirms the result and keeps the checkout session.
 * When a shopper returns from the hosted page, the plugin confirms the result on the server and marks the checkout as soon as the session is approved.
+* The language setting now offers all 54 verification languages (adds Albanian, Bosnian, Kazakh, Kyrgyz and Mongolian).
 
 = 0.3.4 =
 * Security: revoke protected-content access when the approved verification is declined, expires, or returns to review, even if another verification has started.
