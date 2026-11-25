@@ -72,6 +72,7 @@ if ( function_exists( 'as_unschedule_all_actions' ) ) {
 wp_clear_scheduled_hook( 'didit_aml_screen_order' );
 
 // Remove the session bindings and resume pointers created by this plugin, including object-cache entries.
+// phpcs:disable WordPress.DB.DirectDatabaseQuery -- one-time cleanup on uninstall.
 global $wpdb;
 foreach ( [ 'didit_bound_', 'didit_resume_' ] as $didit_prefix ) {
 	$didit_binding_keys = $wpdb->get_col( $wpdb->prepare(
@@ -103,10 +104,9 @@ foreach ( $didit_user_meta_keys as $didit_meta_key ) {
 }
 
 // Verification results stored on orders and products, with and without WooCommerce order tables.
-// phpcs:disable WordPress.DB.DirectDatabaseQuery
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s", $wpdb->esc_like( '_didit_' ) . '%' ) );
 $didit_orders_meta = $wpdb->prefix . 'wc_orders_meta';
 if ( $didit_orders_meta === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $didit_orders_meta ) ) ) {
-	$wpdb->query( $wpdb->prepare( "DELETE FROM {$didit_orders_meta} WHERE meta_key LIKE %s", $wpdb->esc_like( '_didit_' ) . '%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name built from the prefix.
+	$wpdb->query( $wpdb->prepare( "DELETE FROM {$didit_orders_meta} WHERE meta_key LIKE %s", $wpdb->esc_like( '_didit_' ) . '%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name built from the prefix and checked to exist.
 }
 // phpcs:enable

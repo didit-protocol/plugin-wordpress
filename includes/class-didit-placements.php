@@ -306,10 +306,8 @@ final class Didit_Verify_Placements
       $status = $plugin->confirmed_user_status($user_id);
       printf('<h3>%s</h3><p>%s <strong>%s</strong></p>', esc_html__('Identity', 'didit-verify'), esc_html__('Status:', 'didit-verify'), esc_html(self::customer_status_text($status)));
       if (!in_array($status, ['In Review', 'Awaiting User', 'Resubmitted'], true)) {
-        echo $plugin->render_shortcode([ // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
-          'placement' => 'my_account',
-          'text' => 'Approved' === $status ? __('Verify again', 'didit-verify') : __('Verify your Identity', 'didit-verify'),
-        ]);
+        $text = 'Approved' === $status ? __('Verify again', 'didit-verify') : __('Verify your Identity', 'didit-verify');
+        echo $plugin->render_shortcode(['placement' => 'my_account', 'text' => $text]); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
       }
     }
     if (Didit_Verify_Workflows::is_enabled('business')) {

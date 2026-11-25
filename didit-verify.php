@@ -78,7 +78,8 @@ final class Didit_Verify
 
   public function load_textdomain()
   {
-    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    // Loads the German translations bundled in languages/; WordPress.org language packs still take precedence.
+    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages'); // phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound
   }
 
   public function admin_menu()
@@ -1274,7 +1275,7 @@ final class Didit_Verify
 
   public function verification_owner(bool $create = false): string
   {
-    $cookie = $_COOKIE['didit_verification_owner'] ?? '';
+    $cookie = isset($_COOKIE['didit_verification_owner']) ? sanitize_text_field(wp_unslash($_COOKIE['didit_verification_owner'])) : '';
     if (!is_string($cookie) || !preg_match('/^[a-f0-9]{64}$/', $cookie)) {
       if (!$create) {
         return '';
@@ -2547,7 +2548,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout" <?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout" <?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed attribute strings from button_attributes(). ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <input type="hidden" name="didit_session_id" id="didit_session_id" value="" />
@@ -2563,10 +2564,7 @@ final class Didit_Verify
     if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
       return;
     }
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing
-    $session_id = isset($_POST['didit_session_id'])
-      ? sanitize_text_field(wp_unslash($_POST['didit_session_id']))
-      : '';
+    $session_id = isset($_POST['didit_session_id']) ? sanitize_text_field(wp_unslash($_POST['didit_session_id'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce; the value is checked against this browser's session.
 
     if (!$this->checkout_session_is_approved($session_id)) {
       wc_add_notice(
@@ -2915,7 +2913,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout"<?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout"<?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed attribute strings from button_attributes(). ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <?php if ($is_embedded): ?>

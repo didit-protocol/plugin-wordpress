@@ -264,7 +264,7 @@ final class Didit_Verify_Sign_In
     $flow = '' !== $state ? get_transient($key) : false;
     // Single use: a replayed callback finds nothing.
     delete_transient($key);
-    $browser = isset($_COOKIE[self::COOKIE]) ? (string) $_COOKIE[self::COOKIE] : '';
+    $browser = isset($_COOKIE[self::COOKIE]) ? sanitize_text_field(wp_unslash($_COOKIE[self::COOKIE])) : '';
     self::set_browser_cookie('', time() - 3600);
     if (!is_array($flow) || '' === $code || '' === $browser || !hash_equals((string) $flow['browser'], hash('sha256', $browser))) {
       return new WP_Error('expired');
@@ -339,7 +339,7 @@ final class Didit_Verify_Sign_In
    */
   public static function resolve_user(string $sub, string $email, bool $email_verified)
   {
-    $linked = get_users(['meta_key' => self::META, 'meta_value' => $sub, 'number' => 2, 'fields' => 'ID']);
+    $linked = get_users(['meta_key' => self::META, 'meta_value' => $sub, 'number' => 2, 'fields' => 'ID']); // phpcs:ignore WordPress.DB.SlowDBQuery -- one lookup per sign-in.
     if (is_array($linked) && count($linked) > 1) {
       return new WP_Error('linked_elsewhere');
     }
@@ -403,7 +403,7 @@ final class Didit_Verify_Sign_In
     $flow = $person['flow'];
     if (!empty($flow['link_user'])) {
       $user_id = (int) $flow['link_user'];
-      $others = get_users(['meta_key' => self::META, 'meta_value' => $person['sub'], 'number' => 1, 'fields' => 'ID']);
+      $others = get_users(['meta_key' => self::META, 'meta_value' => $person['sub'], 'number' => 1, 'fields' => 'ID']); // phpcs:ignore WordPress.DB.SlowDBQuery -- one lookup per link.
       if (get_current_user_id() !== $user_id || ($others && (int) $others[0] !== $user_id)) {
         self::fail('linked_elsewhere');
       }
@@ -417,9 +417,9 @@ final class Didit_Verify_Sign_In
     }
     wp_set_current_user($user->ID);
     wp_set_auth_cookie($user->ID, false, is_ssl());
-    do_action('wp_login', $user->user_login, $user);
+    do_action('wp_login', $user->user_login, $user); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook, fired like wp_signon().
     $default = admin_url('profile.php');
-    $redirect = apply_filters('login_redirect', $flow['redirect_to'] ?: $default, $flow['redirect_to'], $user);
+    $redirect = apply_filters('login_redirect', $flow['redirect_to'] ?: $default, $flow['redirect_to'], $user); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook.
     wp_safe_redirect(wp_validate_redirect($redirect, $default));
     exit;
   }
