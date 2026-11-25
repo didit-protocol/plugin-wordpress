@@ -1253,7 +1253,7 @@ final class Didit_Verify
       if (!$this->confirmed_order_status($order)) {
         $order->update_meta_data('_didit_status', 'Not Started');
       }
-      $order->add_order_note(sprintf(
+      Didit_Verify_Actions::add_result_note($order, sprintf(
         /* translators: %s: Didit session id. */
         __('Didit: verification session created (%s).', 'didit-verify'),
         sanitize_text_field($data['session_id'] ?? '')
@@ -3237,7 +3237,7 @@ final class Didit_Verify
     $mailer->send($to, $subject, $mailer->wrap_message($subject, $body));
 
     $order->update_meta_data('_didit_reminder_count', $count + 1);
-    $order->add_order_note(sprintf(
+    Didit_Verify_Actions::add_result_note($order, sprintf(
       /* translators: 1: reminder number, 2: max reminders, 3: recipient email. */
       __('Didit: verification reminder %1$d of %2$d sent to %3$s.', 'didit-verify'),
       $count + 1,
