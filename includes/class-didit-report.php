@@ -4,8 +4,10 @@
  *
  * Only what an admin needs to act on is kept: each check's status and score, AML hit
  * names and monitoring state, contact results, the age and the document described by
- * type, subtype and country. Images, raw payloads, data source names and registry
- * document names are never stored.
+ * type, subtype and country, and the status of additional documents and questionnaires.
+ * Images, document files, questionnaire answers, raw payloads, data source names and
+ * registry document names are never stored. Beyond MAX_ITEMS results of one kind only
+ * the number left out is kept.
  */
 
 if (!defined('ABSPATH')) {
@@ -31,8 +33,9 @@ final class Didit_Verify_Report
       'updated_at' => time(),
       'checks' => [],
     ];
+    $truncated = [];
 
-    foreach (self::items($decision, 'id_verifications') as $item) {
+    foreach (self::items($decision, 'id_verifications', 'id', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'id',
         'status' => self::text($item['status'] ?? ''),
@@ -40,10 +43,10 @@ final class Didit_Verify_Report
         'age' => isset($item['age']) && is_numeric($item['age']) ? (int) $item['age'] : null,
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'nfc_verifications') as $item) {
+    foreach (self::items($decision, 'nfc_verifications', 'nfc', $truncated) as $item) {
       $summary['checks'][] = ['type' => 'nfc', 'status' => self::text($item['status'] ?? '')];
     }
-    foreach (self::items($decision, 'liveness_checks') as $item) {
+    foreach (self::items($decision, 'liveness_checks', 'liveness', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'liveness',
         'status' => self::text($item['status'] ?? ''),
@@ -51,17 +54,17 @@ final class Didit_Verify_Report
         'age' => isset($item['age_estimation']) && is_numeric($item['age_estimation']) ? (int) round($item['age_estimation']) : null,
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'face_matches') as $item) {
+    foreach (self::items($decision, 'face_matches', 'face_match', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'face_match',
         'status' => self::text($item['status'] ?? ''),
         'score' => self::number($item['score'] ?? null),
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'aml_screenings') as $item) {
+    foreach (self::items($decision, 'aml_screenings', 'aml', $truncated) as $item) {
       $summary['checks'][] = self::aml($item);
     }
-    foreach (self::items($decision, 'phone_verifications') as $item) {
+    foreach (self::items($decision, 'phone_verifications', 'phone', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'phone',
         'status' => self::text($item['status'] ?? ''),
@@ -72,7 +75,7 @@ final class Didit_Verify_Report
         ])),
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'email_verifications') as $item) {
+    foreach (self::items($decision, 'email_verifications', 'email', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'email',
         'status' => self::text($item['status'] ?? ''),
@@ -84,14 +87,14 @@ final class Didit_Verify_Report
         ])),
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'poa_verifications') as $item) {
+    foreach (self::items($decision, 'poa_verifications', 'poa', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'poa',
         'status' => self::text($item['status'] ?? ''),
         'document' => self::document($item),
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'database_validations') as $item) {
+    foreach (self::items($decision, 'database_validations', 'database', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'database',
         'status' => self::text($item['status'] ?? ''),
@@ -99,7 +102,7 @@ final class Didit_Verify_Report
         'country' => self::text($item['issuing_state'] ?? ''),
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'registry_checks') as $item) {
+    foreach (self::items($decision, 'registry_checks', 'registry', $truncated) as $item) {
       $company = is_array($item['company'] ?? null) ? $item['company'] : [];
       $summary['checks'][] = array_filter([
         'type' => 'registry',
@@ -110,7 +113,7 @@ final class Didit_Verify_Report
         'risk' => self::text($company['risk_level'] ?? ''),
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'key_people_checks') as $item) {
+    foreach (self::items($decision, 'key_people_checks', 'key_people', $truncated) as $item) {
       $ubo = is_array($item['ubo_kyc_summary'] ?? null) ? $item['ubo_kyc_summary'] : [];
       $summary['checks'][] = array_filter([
         'type' => 'key_people',
@@ -123,10 +126,10 @@ final class Didit_Verify_Report
         )] : [],
       ], [__CLASS__, 'keep']);
     }
-    foreach (self::items($decision, 'bank_verifications') as $item) {
+    foreach (self::items($decision, 'bank_verifications', 'bank', $truncated) as $item) {
       $summary['checks'][] = ['type' => 'bank', 'status' => self::text($item['status'] ?? '')];
     }
-    foreach (self::items($decision, 'ip_analyses') as $item) {
+    foreach (self::items($decision, 'ip_analyses', 'ip', $truncated) as $item) {
       $summary['checks'][] = array_filter([
         'type' => 'ip',
         'status' => self::text($item['status'] ?? ''),
@@ -138,6 +141,20 @@ final class Didit_Verify_Report
       ], [__CLASS__, 'keep']);
     }
 
+    foreach (self::items($decision, 'document_verifications', 'document', $truncated) as $item) {
+      $summary['checks'][] = array_filter([
+        'type' => 'document',
+        'status' => self::text($item['status'] ?? ''),
+        'document' => self::document($item),
+      ], [__CLASS__, 'keep']);
+    }
+    foreach (self::items($decision, 'questionnaire_responses', 'questionnaire', $truncated) as $item) {
+      $summary['checks'][] = ['type' => 'questionnaire', 'status' => self::text($item['status'] ?? '')];
+    }
+
+    if ($truncated) {
+      $summary['truncated'] = $truncated;
+    }
     return $summary;
   }
 
@@ -170,13 +187,21 @@ final class Didit_Verify_Report
     ], [__CLASS__, 'keep']);
   }
 
-  private static function items(array $decision, string $key): array
+  /**
+   * The first MAX_ITEMS results of one kind. How many more there were is recorded in
+   * $truncated under the check type, so the admin view can say results were left out.
+   */
+  private static function items(array $decision, string $key, string $type, array &$truncated): array
   {
     $items = $decision[$key] ?? [];
     if (!is_array($items)) {
       return [];
     }
-    return array_slice(array_values(array_filter($items, 'is_array')), 0, self::MAX_ITEMS);
+    $items = array_values(array_filter($items, 'is_array'));
+    if (count($items) > self::MAX_ITEMS) {
+      $truncated[$type] = count($items) - self::MAX_ITEMS;
+    }
+    return array_slice($items, 0, self::MAX_ITEMS);
   }
 
   /** Document type, subtype and country. Never a registry document name. */
@@ -222,6 +247,8 @@ final class Didit_Verify_Report
       'key_people' => __('Key people', 'didit-verify'),
       'bank' => __('Bank verification', 'didit-verify'),
       'ip' => __('IP analysis', 'didit-verify'),
+      'document' => __('Additional document', 'didit-verify'),
+      'questionnaire' => __('Questionnaire', 'didit-verify'),
     ];
     return $labels[$type] ?? $type;
   }
@@ -319,6 +346,20 @@ final class Didit_Verify_Report
           $tags ? ' <span class="description">(' . esc_html(implode(', ', $tags)) . ')</span>' : ''
         );
       }
+    }
+    foreach ((array) ($summary['truncated'] ?? []) as $type => $count) {
+      if ((int) $count < 1) {
+        continue;
+      }
+      $rows .= sprintf(
+        '<tr class="didit-report-truncated"><th scope="row">%s</th><td><span class="description">%s</span></td></tr>',
+        esc_html(self::check_label((string) $type)),
+        esc_html(sprintf(
+          /* translators: %d: number of results of this check that are not listed. */
+          _n('%d more result not shown. Open the session in Didit Console to see it.', '%d more results not shown. Open the session in Didit Console to see them.', (int) $count, 'didit-verify'),
+          (int) $count
+        ))
+      );
     }
     $html = '<div class="didit-report">';
     if ($rows) {

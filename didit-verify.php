@@ -1941,16 +1941,22 @@ final class Didit_Verify
     // Check results are read from Didit, never from the delivery: a reviewer edit or an
     // ongoing-monitoring update arrives as data.updated, and only its envelope is signed
     // under every signature variant.
+    // The fetched decision is newer than any delivery, so its status and report are
+    // recorded together: an approval delivered after a reviewer declined stays declined.
     $report = null;
     if ('data.updated' === $type || get_option('didit_api_key', '')) {
       $decision = $this->fetch_decision($session_id);
       if (!is_wp_error($decision)) {
         $report = Didit_Verify_Report::summarize($decision);
-        if ('data.updated' === $type) {
-          $status = $decision['status'];
+        $status = $decision['status'];
+        $record = $this->with_decision_facts($record, $decision);
+      } else {
+        // Revoking access is always safe to apply from the signed envelope; granting it
+        // waits for the decision. Either way Didit retries the delivery, which fetches the
+        // report again, so neither a stale nor a missing report is left behind.
+        if ('status.updated' === $type && $status && 'Approved' !== $status) {
+          $this->apply_confirmed_status($session_id, $record, $status, $timestamp);
         }
-      } elseif ('data.updated' === $type) {
-        // Didit retries a failed delivery, so the update is not lost.
         return new WP_Error('didit_decision_unavailable', __('Unable to read the decision. Retry later.', 'didit-verify'), ['status' => 503]);
       }
     }
@@ -2555,7 +2561,8 @@ final class Didit_Verify
       return sprintf('<span class="didit-status didit-not-logged-in">%s</span>', esc_html($a['login_text']));
     }
 
-    $status = $this->confirmed_user_status(get_current_user_id());
+    // The status of the workflow these shortcodes run, not of any other check.
+    $status = $this->user_workflow_status(get_current_user_id(), Didit_Verify_Workflows::workflow_for('default'));
 
     if ('Approved' === $status) {
       return sprintf('<span class="didit-status didit-status-approved" style="color:#41D97F;">%s</span>', esc_html($a['verified_text']));
@@ -2583,7 +2590,9 @@ final class Didit_Verify
       );
     }
 
-    $status = $this->confirmed_user_status(get_current_user_id());
+    // Only an approval of the gate's own workflow unlocks it: passing an age check
+    // configured for products does not open content protected by the identity check.
+    $status = $this->user_workflow_status(get_current_user_id(), Didit_Verify_Workflows::workflow_for('default'));
     if ('Approved' === $status) {
       return '<div class="didit-gate didit-gate-unlocked">' . do_shortcode($content) . '</div>';
     }
