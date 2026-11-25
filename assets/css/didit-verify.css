@@ -60,3 +60,8 @@
   .didit-verify-btn { transition: none; }
 }
 .didit-verification-description { font-size: 0.9em; opacity: .8; }
+.didit-account h3 { margin: 1.5em 0 0.5em; }
+.didit-account h3:first-child { margin-top: 0; }
+.didit-product-gate, .didit-registration, .didit-contact-box { margin: 1em 0; }
+.didit-contact { margin: 0.75em 0; }
+.didit-contact-code input { max-width: 10em; margin-right: 0.5em; }
