@@ -120,6 +120,10 @@
         pendingResult = null;
         setCheckoutSession(data.sessionId);
         feedback(btn, i18n.approved || 'Identity verified. You can continue.', false);
+        // Gated pages show what the approval unlocked.
+        if (["product_gate", "my_account", "business"].indexOf(btn.dataset.placement || "") !== -1) {
+          window.setTimeout(function () { window.location.reload(); }, 1200);
+        }
       } else if (data.status === 'Declined' || data.status === 'Abandoned' || data.status === 'Expired' || data.status === 'KYC Expired') {
         pendingResult = null;
         resetBtn(btn);
@@ -248,6 +252,10 @@
       }
       if (btn.dataset.display === "redirect") {
         requestBody.return_url = pageUrl();
+      }
+      // The server maps the placement to the workflow the admin chose for it.
+      if (btn.dataset.placement) {
+        requestBody.placement = btn.dataset.placement;
       }
 
       fetch(cfg.restUrl, {
