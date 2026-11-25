@@ -152,7 +152,12 @@ final class Didit_Verify_Actions
       ));
       return;
     }
-    $summary = Didit_Verify_Report::aml(is_array($data['aml'] ?? null) ? $data['aml'] : []);
+    $aml = is_array($data['aml'] ?? null) ? $data['aml'] : [];
+    // The screening response does not repeat the monitoring choice, so record what was requested.
+    if (!isset($aml['is_ongoing_monitoring_enabled'])) {
+      $aml['is_ongoing_monitoring_enabled'] = $body['include_ongoing_monitoring'];
+    }
+    $summary = Didit_Verify_Report::aml($aml);
     $summary['screened_at'] = time();
     $order->update_meta_data('_didit_aml', $summary);
     $order->add_order_note(sprintf(
