@@ -2681,7 +2681,13 @@ final class Didit_Verify
   /** Every check's result on the user's profile, for admins who can edit the user. */
   public function user_profile_report($user)
   {
-    if (!current_user_can('edit_user', $user->ID) || !current_user_can('list_users')) {
+    if (!current_user_can('edit_user', $user->ID)) {
+      return;
+    }
+    // The verification report is for site managers; the self-service sign-in controls
+    // (link / unlink, nonce-protected) are for anyone who may edit this profile.
+    if (!current_user_can('list_users')) {
+      Didit_Verify_Sign_In::render_profile_link($user);
       return;
     }
     $session_id = (string) get_user_meta($user->ID, '_didit_confirmed_session_id', true);
