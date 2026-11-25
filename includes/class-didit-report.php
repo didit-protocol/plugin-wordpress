@@ -111,7 +111,17 @@ final class Didit_Verify_Report
       ], [__CLASS__, 'keep']);
     }
     foreach (self::items($decision, 'key_people_checks') as $item) {
-      $summary['checks'][] = ['type' => 'key_people', 'status' => self::text($item['status'] ?? '')];
+      $ubo = is_array($item['ubo_kyc_summary'] ?? null) ? $item['ubo_kyc_summary'] : [];
+      $summary['checks'][] = array_filter([
+        'type' => 'key_people',
+        'status' => self::text($item['status'] ?? ''),
+        'flags' => $ubo ? [sprintf(
+          /* translators: 1: approved people, 2: total people. */
+          __('%1$d of %2$d people approved', 'didit-verify'),
+          (int) ($ubo['approved'] ?? 0),
+          (int) ($ubo['total'] ?? 0)
+        )] : [],
+      ], [__CLASS__, 'keep']);
     }
     foreach (self::items($decision, 'bank_verifications') as $item) {
       $summary['checks'][] = ['type' => 'bank', 'status' => self::text($item['status'] ?? '')];
@@ -121,6 +131,10 @@ final class Didit_Verify_Report
         'type' => 'ip',
         'status' => self::text($item['status'] ?? ''),
         'country' => self::text($item['ip_country_code'] ?? ($item['ip_country'] ?? '')),
+        'flags' => array_values(array_filter([
+          !empty($item['is_vpn_or_tor']) ? 'VPN or Tor' : '',
+          !empty($item['is_data_center']) ? 'data center' : '',
+        ])),
       ], [__CLASS__, 'keep']);
     }
 

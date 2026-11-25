@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.5
+ * Version:     0.4.0
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,9 +18,16 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.5');
+define('DIDIT_VERIFY_VERSION', '0.4.0');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
+
+require_once __DIR__ . '/includes/class-didit-api.php';
+require_once __DIR__ . '/includes/class-didit-workflows.php';
+require_once __DIR__ . '/includes/class-didit-report.php';
+require_once __DIR__ . '/includes/class-didit-placements.php';
+require_once __DIR__ . '/includes/class-didit-actions.php';
+require_once __DIR__ . '/includes/class-didit-sign-in.php';
 
 final class Didit_Verify
 {
@@ -58,6 +65,14 @@ final class Didit_Verify
     add_shortcode('didit_gate', [$this, 'render_gate_shortcode']);
 
     add_action('woocommerce_loaded', [$this, 'wc_hooks']);
+
+    add_action('show_user_profile', [$this, 'user_profile_report']);
+    add_action('edit_user_profile', [$this, 'user_profile_report']);
+
+    Didit_Verify_Workflows::hooks();
+    Didit_Verify_Placements::init($this);
+    Didit_Verify_Actions::init($this);
+    Didit_Verify_Sign_In::init();
   }
 
   public function load_textdomain()
