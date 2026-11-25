@@ -143,6 +143,22 @@ final class Didit_Verify
       'didit_btn_padding_v' => ['sanitize_callback' => 'absint', 'default' => 12],
       'didit_btn_padding_h' => ['sanitize_callback' => 'absint', 'default' => 24],
       'didit_btn_font_size' => ['sanitize_callback' => 'absint', 'default' => 16],
+      'didit_console_url' => ['sanitize_callback' => 'esc_url_raw', 'default' => ''],
+      Didit_Verify_Workflows::OPTION => ['sanitize_callback' => [Didit_Verify_Workflows::class, 'sanitize_map'], 'default' => []],
+      'didit_registration_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_gate_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_my_account_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_business_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_gate_categories' => ['sanitize_callback' => [Didit_Verify_Placements::class, 'sanitize_categories'], 'default' => []],
+      'didit_aml_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_aml_threshold' => ['sanitize_callback' => [Didit_Verify_Actions::class, 'sanitize_amount'], 'default' => 0],
+      'didit_aml_monitoring' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_aml_hold' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_contact_phone' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_contact_email' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_signin_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_signin_publishable_key' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+      'didit_signin_application_id' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
     ];
 
     foreach ($fields as $name => $args) {
@@ -154,6 +170,19 @@ final class Didit_Verify
     add_settings_field('didit_unilink_url', __('UniLink URL', 'didit-verify'), [$this, 'field_unilink'], 'didit-verify', 'didit_connection');
     add_settings_field('didit_workflow_id', __('Workflow ID', 'didit-verify'), [$this, 'field_workflow_id'], 'didit-verify', 'didit_connection');
     add_settings_field('didit_api_key', __('API Key', 'didit-verify'), [$this, 'field_api_key'], 'didit-verify', 'didit_connection');
+
+    add_settings_section('didit_placements_section', __('Workflows and placements', 'didit-verify'), '__return_false', 'didit-verify');
+    add_settings_field('didit_workflows', __('Your workflows', 'didit-verify'), [Didit_Verify_Workflows::class, 'render_catalogue'], 'didit-verify', 'didit_placements_section');
+    add_settings_field('didit_placements', __('Placements', 'didit-verify'), [Didit_Verify_Workflows::class, 'render_placements'], 'didit-verify', 'didit_placements_section');
+    add_settings_field('didit_gate_categories', __('Age-restricted categories', 'didit-verify'), [Didit_Verify_Placements::class, 'field_gate_categories'], 'didit-verify', 'didit_placements_section');
+    add_settings_field('didit_console_url', __('Console link', 'didit-verify'), [$this, 'field_console_url'], 'didit-verify', 'didit_placements_section');
+
+    add_settings_section('didit_actions', __('Direct checks', 'didit-verify'), '__return_false', 'didit-verify');
+    add_settings_field('didit_aml_enabled', __('AML screening at checkout', 'didit-verify'), [Didit_Verify_Actions::class, 'field_aml'], 'didit-verify', 'didit_actions');
+    add_settings_field('didit_contact_checks', __('Phone and email', 'didit-verify'), [Didit_Verify_Actions::class, 'field_contact'], 'didit-verify', 'didit_actions');
+
+    add_settings_section('didit_signin', __('Sign in with Didit', 'didit-verify'), '__return_false', 'didit-verify');
+    add_settings_field('didit_signin_enabled', __('Sign-in', 'didit-verify'), [Didit_Verify_Sign_In::class, 'field_settings'], 'didit-verify', 'didit_signin');
 
     add_settings_section('didit_session', __('Session Options (API mode)', 'didit-verify'), '__return_false', 'didit-verify');
     add_settings_field('didit_vendor_data_mode', __('Vendor Data', 'didit-verify'), [$this, 'field_vendor_data'], 'didit-verify', 'didit_session');
@@ -195,7 +224,7 @@ final class Didit_Verify
 
   public function admin_enqueue_scripts($hook)
   {
-    if (in_array($hook, ['settings_page_didit-verify', 'users.php', 'post.php', 'post-new.php', 'woocommerce_page_wc-orders'], true)) {
+    if (in_array($hook, ['settings_page_didit-verify', 'users.php', 'profile.php', 'user-edit.php', 'post.php', 'post-new.php', 'woocommerce_page_wc-orders'], true)) {
       wp_enqueue_style('didit-admin', DIDIT_VERIFY_URL . 'assets/css/didit-admin.css', [], DIDIT_VERIFY_VERSION);
     }
     if ('settings_page_didit-verify' !== $hook) {
@@ -254,6 +283,16 @@ final class Didit_Verify
 			<p class="description">%s</p>',
       esc_attr(get_option('didit_api_key', '')),
       esc_html__('Found in Didit Console → API & Webhooks. Used by your WordPress server to create and confirm sessions. Keep it private.', 'didit-verify')
+    );
+  }
+
+  public function field_console_url()
+  {
+    printf(
+      '<input type="url" name="didit_console_url" value="%s" class="large-text" placeholder="https://business.didit.me/console/…" />
+      <p class="description">%s</p>',
+      esc_attr(get_option('didit_console_url', '')),
+      esc_html__('Paste the address of any page of this application in the Didit Console. Orders and user profiles then link straight to each verification. Without it, the link opens the console home.', 'didit-verify')
     );
   }
 
