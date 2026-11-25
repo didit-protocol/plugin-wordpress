@@ -74,11 +74,39 @@ final class Didit_Verify_Workflows
     }
     foreach (array_keys(self::PLACEMENTS) as $placement) {
       $id = isset($value[$placement]) ? trim((string) $value[$placement]) : '';
-      if ('' !== $id && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
-        $clean[$placement] = $id;
+      if ('' === $id || !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
+        continue;
       }
+      // Business customers need a KYB workflow; every other placement verifies a person.
+      $type = self::type_of($id);
+      if ('' !== $type && ('business' === $placement) !== ('kyb' === $type)) {
+        if (function_exists('add_settings_error')) {
+          add_settings_error(self::OPTION, 'didit_workflow_type_' . $placement, sprintf(
+            /* translators: %s: placement name. */
+            __('%s: choose a workflow of the matching type (KYB for business customers, KYC everywhere else).', 'didit-verify'),
+            self::placement_labels()[$placement]
+          ));
+        }
+        continue;
+      }
+      $clean[$placement] = $id;
     }
     return $clean;
+  }
+
+  /** 'kyc' or 'kyb' for a workflow in the cached catalogue, '' when unknown. */
+  public static function type_of(string $workflow_id): string
+  {
+    if ('' === $workflow_id) {
+      return '';
+    }
+    $cached = get_transient(self::CACHE_KEY);
+    foreach (is_array($cached) ? $cached : [] as $workflow) {
+      if (is_array($workflow) && ($workflow['id'] ?? '') === $workflow_id) {
+        return (string) ($workflow['type'] ?? '');
+      }
+    }
+    return '';
   }
 
   /**

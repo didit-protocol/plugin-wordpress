@@ -904,7 +904,7 @@ final class Didit_Verify
     register_rest_route('didit/v1', '/verify', [
       'methods' => 'POST',
       'callback' => [$this, 'rest_save_verification'],
-      'permission_callback' => [$this, 'rest_check_permission'],
+      'permission_callback' => [$this, 'rest_check_verify_permission'],
     ]);
 
     register_rest_route('didit/v1', '/webhook', [
@@ -932,6 +932,27 @@ final class Didit_Verify
     }
 
     return true;
+  }
+
+  /**
+   * Confirming a result names only the session. A visitor without an account may
+   * confirm a session this browser started for a placement open to guests, judged by
+   * the placement stored with the session, never by what the request claims.
+   */
+  public function rest_check_verify_permission($request)
+  {
+    $allowed = $this->rest_check_permission($request);
+    if (true === $allowed || !is_wp_error($allowed) || 401 !== (int) ($allowed->get_error_data()['status'] ?? 0)) {
+      return $allowed;
+    }
+    $input = $request->get_json_params();
+    $session_id = is_array($input) && is_string($input['sessionId'] ?? null) ? $input['sessionId'] : '';
+    $record = $this->stored_session($session_id);
+    if ($this->session_belongs_to_request($record)
+      && Didit_Verify_Placements::guest_may_start(['placement' => (string) ($record['placement'] ?? '')])) {
+      return true;
+    }
+    return $allowed;
   }
 
   private function validate_order_context($input)
@@ -975,12 +996,76 @@ final class Didit_Verify
     return $placement;
   }
 
-  /** The workflow a stored session ran. Sessions from before 0.4.0 ran the default one. */
+  /**
+   * The workflow a stored session ran, or '' when it is not known. Sessions created
+   * before 0.4.0 did not record it, and the current default Workflow ID says nothing
+   * about which workflow they passed: see session_workflow().
+   */
   public function record_workflow($record): string
   {
-    return is_array($record) && !empty($record['workflow_id'])
-      ? (string) $record['workflow_id']
-      : (string) get_option('didit_workflow_id', '');
+    return is_array($record) && !empty($record['workflow_id']) ? (string) $record['workflow_id'] : '';
+  }
+
+  /**
+   * The workflow of a session, recovered from Didit's decision for a session created
+   * before 0.4.0 and remembered on the record. When Didit cannot say, the session
+   * counts for no workflow and the person verifies again.
+   */
+  public function session_workflow(string $session_id, $record): string
+  {
+    $workflow_id = $this->record_workflow($record);
+    if ('' !== $workflow_id || !is_array($record)) {
+      return $workflow_id;
+    }
+    // Look up only approvals, and at most once an hour per session.
+    if ('Approved' !== $this->normalize_status($record['status'] ?? '') || (int) ($record['workflow_lookup_at'] ?? 0) > time() - HOUR_IN_SECONDS) {
+      return '';
+    }
+    $decision = $this->fetch_decision($session_id);
+    if (!is_wp_error($decision)) {
+      $record = $this->with_decision_facts($record, $decision);
+    }
+    $record['workflow_lookup_at'] = time();
+    $this->store_session($session_id, $record);
+    return $this->record_workflow($record);
+  }
+
+  /**
+   * Copy what the confirmed decision says about the session itself onto its record:
+   * the workflow it ran (sessions before 0.4.0 did not record it) and whether it
+   * verified a person or a business.
+   */
+  public function with_decision_facts(array $record, array $decision): array
+  {
+    $workflow_id = isset($decision['workflow_id']) && is_string($decision['workflow_id']) ? sanitize_text_field($decision['workflow_id']) : '';
+    if (empty($record['workflow_id']) && '' !== $workflow_id) {
+      $record['workflow_id'] = $workflow_id;
+    }
+    $kind = isset($decision['session_kind']) && is_string($decision['session_kind']) ? strtolower($decision['session_kind']) : '';
+    if (in_array($kind, ['user', 'business'], true)) {
+      $record['session_kind'] = $kind;
+    }
+    return $record;
+  }
+
+  /**
+   * Whether the session verified the kind of subject its placement is for: a company
+   * for business customers, a person everywhere else. A KYB workflow chosen for
+   * checkout, or a KYC workflow chosen for business customers, approves nothing.
+   */
+  public function record_kind_matches($record): bool
+  {
+    if (!is_array($record)) {
+      return false;
+    }
+    $expected = 'business' === ($record['placement'] ?? '') ? 'business' : 'user';
+    $kind = (string) ($record['session_kind'] ?? '');
+    if ('' === $kind) {
+      // Not confirmed by a decision yet: fall back to the workflow's type in the catalogue.
+      $type = Didit_Verify_Workflows::type_of($this->record_workflow($record));
+      $kind = '' === $type ? $expected : ('kyb' === $type ? 'business' : 'user');
+    }
+    return $kind === $expected;
   }
 
   public function rest_create_session($request)
@@ -995,7 +1080,7 @@ final class Didit_Verify
 
     // Continuing the session this browser or order already has costs nothing, so a retry
     // must not spend the visitor's creation budget or leave a duplicate session behind.
-    $resume = $this->resumable_session($order, $workflow_id);
+    $resume = $this->resumable_session($order, $workflow_id, $placement);
     if ($resume) {
       return rest_ensure_response($resume);
     }
@@ -1152,6 +1237,11 @@ final class Didit_Verify
       'workflow_id' => $workflow_id,
     ]);
     update_option($this->resume_key($owner), $session_id, false);
+    if ('registration' === $placement) {
+      // Kept apart from the resume pointer, which a later checkout session replaces, so
+      // an account created at checkout can still find this browser's registration check.
+      update_option($this->registration_key($owner), $session_id, false);
+    }
     if ($user_id) {
       // A business check never stands in for the person's own identity check.
       update_user_meta($user_id, 'business' === $placement ? '_didit_kyb_pending_session_id' : '_didit_pending_session_id', $session_id);
@@ -1216,6 +1306,18 @@ final class Didit_Verify
     return 'didit_resume_' . $owner;
   }
 
+  public function registration_key(string $owner): string
+  {
+    return 'didit_registration_' . $owner;
+  }
+
+  /** The registration session this browser started last, if any. */
+  public function visitor_registration_session(): string
+  {
+    $owner = $this->verification_owner();
+    return '' === $owner ? '' : (string) get_option($this->registration_key($owner), '');
+  }
+
   private function status_is_open(string $status): bool
   {
     return in_array($this->normalize_status($status), ['Not Started', 'In Progress', 'Awaiting User', 'In Review', 'Resubmitted'], true);
@@ -1225,7 +1327,7 @@ final class Didit_Verify
    * The session this visitor can continue, if any. A retry returns it instead of
    * creating another session, which is what kept Android shoppers locked out.
    */
-  private function resumable_session($order = null, string $workflow_id = '')
+  private function resumable_session($order = null, string $workflow_id = '', string $placement = '')
   {
     $candidates = [];
     $owner = $this->verification_owner();
@@ -1241,8 +1343,12 @@ final class Didit_Verify
       if (!is_array($record) || !$this->session_belongs_to_request($record, $order) || !$this->status_is_open((string) ($record['status'] ?? ''))) {
         continue;
       }
-      // A session of another workflow cannot finish this placement's check.
+      // A session of another workflow cannot finish this placement's check, and one
+      // started for another placement would be refused by it even after approval.
       if ('' !== $workflow_id && $this->record_workflow($record) !== $workflow_id) {
+        continue;
+      }
+      if ('' !== $placement && (string) ($record['placement'] ?? '') !== $placement) {
         continue;
       }
       // A guest session carries no account, so after logging in the visitor needs one that does.
