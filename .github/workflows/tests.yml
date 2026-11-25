@@ -27,6 +27,7 @@ jobs:
       - run: php tests/test-report.php
       - run: php tests/test-actions.php
       - run: php tests/test-sign-in.php
+      - run: php tests/test-uninstall.php
       - name: Release zip leaves development files out
         run: |
           bin/build-zip.sh
