@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-25T10:38:58+00:00\n"
+"POT-Creation-Date: 2026-11-25T12:20:19+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: didit-verify\n"
@@ -33,7 +33,7 @@ msgstr ""
 
 #. Author of the plugin
 #: didit-verify.php
-#: didit-verify.php:2421
+#: didit-verify.php:2621
 msgid "Didit"
 msgstr ""
 
@@ -59,7 +59,7 @@ msgid "UniLink URL"
 msgstr ""
 
 #: didit-verify.php:173
-#: includes/class-didit-workflows.php:199
+#: includes/class-didit-workflows.php:227
 msgid "Workflow ID"
 msgstr ""
 
@@ -100,8 +100,8 @@ msgid "Phone and email"
 msgstr ""
 
 #: didit-verify.php:186
-#: includes/class-didit-sign-in.php:123
-#: includes/class-didit-sign-in.php:133
+#: includes/class-didit-sign-in.php:153
+#: includes/class-didit-sign-in.php:163
 msgid "Sign in with Didit"
 msgstr ""
 
@@ -375,7 +375,7 @@ msgstr ""
 
 #: didit-verify.php:538
 #: didit-verify.php:748
-#: includes/class-didit-placements.php:309
+#: includes/class-didit-placements.php:392
 msgid "Verify your Identity"
 msgstr ""
 
@@ -429,7 +429,7 @@ msgstr ""
 #: didit-verify.php:789
 #: didit-verify.php:804
 #: didit-verify.php:819
-#: includes/class-didit-placements.php:135
+#: includes/class-didit-placements.php:203
 msgid "WooCommerce is not active."
 msgstr ""
 
@@ -605,422 +605,460 @@ msgid "Content inside is only visible to verified users. Others see a verificati
 msgstr ""
 
 #: didit-verify.php:921
-#: includes/class-didit-actions.php:217
+#: includes/class-didit-actions.php:408
 msgid "Invalid security token."
 msgstr ""
 
 #: didit-verify.php:931
-#: didit-verify.php:973
+#: didit-verify.php:994
 msgid "You must be logged in to start verification."
 msgstr ""
 
-#: didit-verify.php:967
-#: didit-verify.php:970
+#: didit-verify.php:988
+#: didit-verify.php:991
 msgid "This verification is not available."
 msgstr ""
 
-#: didit-verify.php:1011
+#: didit-verify.php:1096
 msgid "Didit API credentials are not configured."
 msgstr ""
 
-#: didit-verify.php:1126
+#: didit-verify.php:1211
 msgid "Didit API error"
 msgstr ""
 
-#: didit-verify.php:1136
+#: didit-verify.php:1221
 msgid "No verification URL returned."
 msgstr ""
 
 #. translators: %s: Didit session id.
-#: didit-verify.php:1168
+#: didit-verify.php:1258
 #, php-format
 msgid "Didit: verification session created (%s)."
 msgstr ""
 
-#: didit-verify.php:1326
+#: didit-verify.php:1432
 msgid "Start a new verification from this page."
 msgstr ""
 
-#: didit-verify.php:1354
+#: didit-verify.php:1460
 msgid "API Session mode is required to confirm verification."
 msgstr ""
 
-#: didit-verify.php:1361
-#: didit-verify.php:1366
+#: didit-verify.php:1467
+#: didit-verify.php:1472
 msgid "Unable to confirm verification. Please try again."
 msgstr ""
 
-#: didit-verify.php:1698
+#: didit-verify.php:1885
 msgid "Webhook secret is not configured."
 msgstr ""
 
-#: didit-verify.php:1704
-#: didit-verify.php:1745
+#: didit-verify.php:1891
+#: didit-verify.php:1932
 msgid "Invalid webhook payload."
 msgstr ""
 
-#: didit-verify.php:1718
+#: didit-verify.php:1905
 msgid "Missing or stale webhook signature."
 msgstr ""
 
-#: didit-verify.php:1734
+#: didit-verify.php:1921
 msgid "Webhook signature mismatch."
 msgstr ""
 
-#: didit-verify.php:1768
+#: didit-verify.php:1961
 msgid "Unable to read the decision. Retry later."
 msgstr ""
 
-#: didit-verify.php:1797
+#: didit-verify.php:1990
 msgid "Too many verification requests. Please try again later."
 msgstr ""
 
 #. translators: 1: verification status, 2: source (browser/webhook).
-#: didit-verify.php:2151
+#: didit-verify.php:2344
 #, php-format
 msgid "Didit: verification status \"%1$s\" (via %2$s)."
 msgstr ""
 
-#: didit-verify.php:2160
+#: didit-verify.php:2354
 msgid "Didit: identity verified - order released."
 msgstr ""
 
-#: didit-verify.php:2276
+#: didit-verify.php:2356
+msgid "Didit: identity verified - the order stays on hold until the other Didit checks are resolved."
+msgstr ""
+
+#: didit-verify.php:2473
 msgid "Creating session…"
 msgstr ""
 
-#: didit-verify.php:2277
+#: didit-verify.php:2474
 msgid "Your verification is being reviewed. Check again shortly."
 msgstr ""
 
-#: didit-verify.php:2278
+#: didit-verify.php:2475
 msgid "Confirming verification…"
 msgstr ""
 
-#: didit-verify.php:2279
+#: didit-verify.php:2476
 msgid "Check status"
 msgstr ""
 
-#: didit-verify.php:2280
+#: didit-verify.php:2477
 msgid "Identity verified. You can continue."
 msgstr ""
 
-#: didit-verify.php:2281
+#: didit-verify.php:2478
 msgid "Verification declined. Please try again."
 msgstr ""
 
-#: didit-verify.php:2282
+#: didit-verify.php:2479
 msgid "Verification expired. Please start again."
 msgstr ""
 
-#: didit-verify.php:2283
+#: didit-verify.php:2480
 msgid "Verification submitted. Your result is available from the service provider."
 msgstr ""
 
-#: didit-verify.php:2284
+#: didit-verify.php:2481
 msgid "Verification error:"
 msgstr ""
 
-#: didit-verify.php:2285
+#: didit-verify.php:2482
 msgid "No verification URL returned"
 msgstr ""
 
-#: didit-verify.php:2361
+#: didit-verify.php:2558
 msgid "Identity Verified"
 msgstr ""
 
-#: didit-verify.php:2362
+#: didit-verify.php:2559
 msgid "Not Verified"
 msgstr ""
 
-#: didit-verify.php:2363
+#: didit-verify.php:2560
 msgid "Verification Declined"
 msgstr ""
 
-#: didit-verify.php:2364
+#: didit-verify.php:2561
 msgid "Verification In Review"
 msgstr ""
 
-#: didit-verify.php:2365
+#: didit-verify.php:2562
 msgid "Please log in"
 msgstr ""
 
-#: didit-verify.php:2390
+#: didit-verify.php:2588
 msgid "Please verify your identity to access this content."
 msgstr ""
 
-#: didit-verify.php:2396
+#: didit-verify.php:2594
 msgid "Please log in to access this content."
 msgstr ""
 
-#: didit-verify.php:2408
+#: didit-verify.php:2608
 msgid "Your identity verification is being reviewed. Please check back shortly."
 msgstr ""
 
-#: didit-verify.php:2423
+#: didit-verify.php:2623
 msgid "Didit KYB"
 msgstr ""
 
 #. translators: %s: date when user was verified
-#: didit-verify.php:2441
+#: didit-verify.php:2641
 #, php-format
 msgid "Verified on %s"
 msgstr ""
 
 #. translators: %s: date when user was verified
-#: didit-verify.php:2441
+#: didit-verify.php:2641
 msgid "Approved"
 msgstr ""
 
 #. translators: %s: date when the verification was declined
-#: didit-verify.php:2446
+#: didit-verify.php:2646
 #, php-format
 msgid "Declined on %s"
 msgstr ""
 
 #. translators: %s: date when the verification was declined
-#: didit-verify.php:2446
-#: includes/class-didit-placements.php:280
+#: didit-verify.php:2646
+#: includes/class-didit-placements.php:348
 msgid "Declined"
 msgstr ""
 
 #. translators: %s: date when the verification status was last updated
-#: didit-verify.php:2451
+#: didit-verify.php:2651
 #, php-format
 msgid "Updated on %s"
 msgstr ""
 
-#: didit-verify.php:2461
-#: includes/class-didit-placements.php:293
+#: didit-verify.php:2661
+#: includes/class-didit-placements.php:362
 msgid "Not verified"
 msgstr ""
 
-#: didit-verify.php:2509
-#: didit-verify.php:2605
-#: didit-verify.php:2654
+#: didit-verify.php:2709
+#: didit-verify.php:2805
+#: didit-verify.php:3012
 msgid "Didit verification"
 msgstr ""
 
-#: didit-verify.php:2510
+#: didit-verify.php:2710
 msgid "Select this product for the \"Only selected products\" / \"All products except selected\" scope in the Didit Verify settings."
 msgstr ""
 
-#: didit-verify.php:2571
-#: didit-verify.php:2958
+#: didit-verify.php:2771
+#: didit-verify.php:3326
 msgid "Please complete identity verification before placing your order."
 msgstr ""
 
-#: didit-verify.php:2594
+#: didit-verify.php:2794
 msgid "Didit Verification:"
 msgstr ""
 
-#: didit-verify.php:2641
+#: didit-verify.php:2857
 msgid "Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit."
 msgstr ""
 
-#: didit-verify.php:2655
-#: includes/class-didit-placements.php:307
+#: didit-verify.php:3013
+#: includes/class-didit-placements.php:390
 msgid "Identity"
 msgstr ""
 
-#: didit-verify.php:2662
-#: includes/class-didit-workflows.php:206
+#: didit-verify.php:3020
+#: includes/class-didit-workflows.php:234
 msgid "Business (KYB)"
 msgstr ""
 
-#: didit-verify.php:2724
+#: didit-verify.php:3082
 msgid "Your identity has been verified. Thank you!"
 msgstr ""
 
-#: didit-verify.php:2735
+#: didit-verify.php:3093
 msgid "Your verification is being reviewed. No further action is needed."
 msgstr ""
 
-#: didit-verify.php:2740
+#: didit-verify.php:3098
 msgid "Your previous verification attempt was declined. Please try again."
 msgstr ""
 
-#: didit-verify.php:2796
-msgid "Didit: order held until identity verification is approved."
-msgstr ""
-
-#: didit-verify.php:2815
-#: didit-verify.php:2824
+#: didit-verify.php:3183
+#: didit-verify.php:3192
 msgid "Please verify your identity to complete your order:"
 msgstr ""
 
-#: didit-verify.php:2823
+#: didit-verify.php:3191
 msgid "Identity verification required"
 msgstr ""
 
-#: didit-verify.php:2826
+#: didit-verify.php:3194
 msgid "Verify your identity"
 msgstr ""
 
 #. translators: %s: order number.
-#: didit-verify.php:2866
+#: didit-verify.php:3234
 #, php-format
 msgid "Action required: verify your identity for order #%s"
 msgstr ""
 
-#: didit-verify.php:2871
+#: didit-verify.php:3239
 msgid "Your order is waiting for identity verification. It only takes a couple of minutes."
 msgstr ""
 
-#: didit-verify.php:2873
+#: didit-verify.php:3241
 msgid "Verify your identity now"
 msgstr ""
 
 #. translators: 1: reminder number, 2: max reminders, 3: recipient email.
-#: didit-verify.php:2882
+#: didit-verify.php:3250
 #, php-format
 msgid "Didit: verification reminder %1$d of %2$d sent to %3$s."
 msgstr ""
 
-#: includes/class-didit-actions.php:54
+#: includes/class-didit-actions.php:55
 msgid "Screen the billing name against sanctions and PEP lists"
 msgstr ""
 
-#: includes/class-didit-actions.php:55
+#: includes/class-didit-actions.php:56
 msgid "When the order total is at least"
 msgstr ""
 
-#: includes/class-didit-actions.php:58
+#: includes/class-didit-actions.php:59
 msgid "Keep screened customers under ongoing monitoring"
 msgstr ""
 
-#: includes/class-didit-actions.php:60
+#: includes/class-didit-actions.php:61
 msgid "Put the order on hold when the screening needs review or is declined"
 msgstr ""
 
-#: includes/class-didit-actions.php:61
+#: includes/class-didit-actions.php:62
 msgid "Runs in the background after the order is placed, in the store currency. The result appears on the order. Admins can run it again from the order actions."
 msgstr ""
 
-#: includes/class-didit-actions.php:72
+#: includes/class-didit-actions.php:73
 msgid "Ask customers to confirm the billing phone with a one-time code"
 msgstr ""
 
-#: includes/class-didit-actions.php:74
+#: includes/class-didit-actions.php:75
 msgid "Ask customers to confirm the billing email with a one-time code"
 msgstr ""
 
-#: includes/class-didit-actions.php:75
+#: includes/class-didit-actions.php:76
 msgid "Shown on the order confirmation page and in My Account → Orders, for classic and block checkout. Codes go only to the contact on the order."
 msgstr ""
 
-#: includes/class-didit-actions.php:114
+#: includes/class-didit-actions.php:115
 msgid "Run Didit AML screening"
 msgstr ""
 
+#: includes/class-didit-actions.php:141
+msgid "Didit: automatic AML screening skipped because it is no longer enabled for this order."
+msgstr ""
+
 #. translators: %s: error message.
-#: includes/class-didit-actions.php:150
+#: includes/class-didit-actions.php:162
 #, php-format
 msgid "Didit: AML screening could not run (%s). Run it again from the order actions."
 msgstr ""
 
 #. translators: 1: AML status, 2: number of hits.
-#: includes/class-didit-actions.php:160
+#: includes/class-didit-actions.php:177
 #, php-format
 msgid "Didit: AML screening of the billing name: %1$s, %2$d hit(s)."
 msgstr ""
 
-#: includes/class-didit-actions.php:167
-msgid "Didit: order held until the AML screening is reviewed."
+#: includes/class-didit-actions.php:197
+msgid "Didit: AML screening cleared - order released."
 msgstr ""
 
-#: includes/class-didit-actions.php:185
+#. translators: %s: list of outstanding checks.
+#: includes/class-didit-actions.php:284
+#, php-format
+msgid "Didit: order held until these checks are resolved: %s."
+msgstr ""
+
+#: includes/class-didit-actions.php:291
+msgid "identity verification"
+msgstr ""
+
+#: includes/class-didit-actions.php:291
+#: includes/class-didit-report.php:267
+#: includes/class-didit-workflows.php:185
+msgid "AML screening"
+msgstr ""
+
+#. translators: %s: list of outstanding checks.
+#: includes/class-didit-actions.php:341
+#, php-format
+msgid "Didit: hold released manually while these checks were outstanding: %s. Didit will not hold this order again for them."
+msgstr ""
+
+#: includes/class-didit-actions.php:365
+msgid "Contact changed since it was verified"
+msgstr ""
+
+#: includes/class-didit-actions.php:372
 msgid "Didit checks on this order:"
 msgstr ""
 
-#: includes/class-didit-actions.php:219
+#: includes/class-didit-actions.php:415
 msgid "Order not found."
 msgstr ""
 
-#: includes/class-didit-actions.php:239
+#: includes/class-didit-actions.php:443
 msgid "This check is not available."
 msgstr ""
 
-#: includes/class-didit-actions.php:289
+#: includes/class-didit-actions.php:629
+msgid "We cannot tell the country code of the phone on this order. Please contact the store to update it in international format (for example +44 20 7946 0000)."
+msgstr ""
+
+#: includes/class-didit-actions.php:646
 msgid "The order has no contact to verify."
 msgstr ""
 
-#: includes/class-didit-actions.php:292
+#: includes/class-didit-actions.php:649
 msgid "Too many codes requested. Please try again later."
 msgstr ""
 
-#: includes/class-didit-actions.php:303
+#: includes/class-didit-actions.php:661
 msgid "We could not send a code to this contact. Please contact the store."
 msgstr ""
 
-#: includes/class-didit-actions.php:318
+#: includes/class-didit-actions.php:678
 msgid "Enter the code you received."
 msgstr ""
 
-#: includes/class-didit-actions.php:321
+#: includes/class-didit-actions.php:684
+msgid "The contact on this order has changed. Request a new code."
+msgstr ""
+
+#: includes/class-didit-actions.php:687
 msgid "Too many attempts. Please try again later."
 msgstr ""
 
-#: includes/class-didit-actions.php:331
+#: includes/class-didit-actions.php:696
 msgid "That code is not valid. Check it or request a new one."
 msgstr ""
 
-#: includes/class-didit-actions.php:335
+#: includes/class-didit-actions.php:701
 msgid "Didit: billing phone verified with a one-time code."
 msgstr ""
 
-#: includes/class-didit-actions.php:336
+#: includes/class-didit-actions.php:702
 msgid "Didit: billing email verified with a one-time code."
 msgstr ""
 
-#: includes/class-didit-actions.php:363
-#: includes/class-didit-report.php:217
-#: includes/class-didit-workflows.php:158
-#: includes/class-didit-workflows.php:159
+#: includes/class-didit-actions.php:775
+#: includes/class-didit-report.php:268
+#: includes/class-didit-workflows.php:186
+#: includes/class-didit-workflows.php:187
 msgid "Phone"
 msgstr ""
 
-#: includes/class-didit-actions.php:363
-#: includes/class-didit-report.php:218
-#: includes/class-didit-workflows.php:160
-#: includes/class-didit-workflows.php:161
+#: includes/class-didit-actions.php:775
+#: includes/class-didit-report.php:269
+#: includes/class-didit-workflows.php:188
+#: includes/class-didit-workflows.php:189
 msgid "Email"
 msgstr ""
 
-#: includes/class-didit-actions.php:382
+#: includes/class-didit-actions.php:800
 msgid "Send code"
 msgstr ""
 
-#: includes/class-didit-actions.php:383
+#: includes/class-didit-actions.php:801
 msgid "Code"
 msgstr ""
 
-#: includes/class-didit-actions.php:384
+#: includes/class-didit-actions.php:802
 msgid "Confirm"
 msgstr ""
 
-#: includes/class-didit-actions.php:398
+#: includes/class-didit-actions.php:817
 msgid "Code sent. Enter it below."
 msgstr ""
 
-#: includes/class-didit-actions.php:399
+#: includes/class-didit-actions.php:818
 msgid "Verified. Thank you!"
 msgstr ""
 
-#: includes/class-didit-actions.php:400
+#: includes/class-didit-actions.php:819
 msgid "Something went wrong. Please try again."
 msgstr ""
 
-#: includes/class-didit-actions.php:405
+#: includes/class-didit-actions.php:824
 msgid "Confirm your contact details"
 msgstr ""
 
-#: includes/class-didit-actions.php:406
+#: includes/class-didit-actions.php:825
 msgid "We send a one-time code to the contact on this order."
 msgstr ""
 
 #: includes/class-didit-api.php:30
-#: includes/class-didit-workflows.php:191
+#: includes/class-didit-workflows.php:219
 msgid "Add your Didit API key first."
 msgstr ""
 
@@ -1036,283 +1074,329 @@ msgstr ""
 msgid "Didit returned an error. Please try again."
 msgstr ""
 
-#: includes/class-didit-placements.php:103
+#: includes/class-didit-placements.php:97
+msgid "Verify your identity to create an account"
+msgstr ""
+
+#: includes/class-didit-placements.php:115
+msgid "Creating an account needs an identity check."
+msgstr ""
+
+#: includes/class-didit-placements.php:126
+msgid "Creating an account at checkout needs an identity check. Verify here first if you create one."
+msgstr ""
+
+#: includes/class-didit-placements.php:171
 msgid "Please verify your identity before creating your account."
 msgstr ""
 
-#: includes/class-didit-placements.php:147
+#: includes/class-didit-placements.php:215
 msgid "Products in these categories, and products marked \"Age-restricted\" in Product data → Advanced, can only be added to the cart after an approval from the age-restricted workflow."
 msgstr ""
 
-#: includes/class-didit-placements.php:156
+#: includes/class-didit-placements.php:224
 msgid "Age-restricted"
 msgstr ""
 
-#: includes/class-didit-placements.php:157
+#: includes/class-didit-placements.php:225
 msgid "Ask for an approval from the age-restricted workflow before this product can be bought."
 msgstr ""
 
-#: includes/class-didit-placements.php:192
+#: includes/class-didit-placements.php:260
 msgid "This product is age-restricted. Please verify your age to buy it."
 msgstr ""
 
-#: includes/class-didit-placements.php:222
+#: includes/class-didit-placements.php:290
 msgid "Your cart contains age-restricted products. Please verify your age before checking out."
 msgstr ""
 
-#: includes/class-didit-placements.php:238
+#: includes/class-didit-placements.php:306
 msgid "Verify my age"
 msgstr ""
 
-#: includes/class-didit-placements.php:270
+#: includes/class-didit-placements.php:338
 msgid "Verification"
 msgstr ""
 
-#: includes/class-didit-placements.php:278
+#: includes/class-didit-placements.php:346
 msgid "Verified"
 msgstr ""
 
-#: includes/class-didit-placements.php:284
+#: includes/class-didit-placements.php:350
 msgid "Being reviewed"
 msgstr ""
 
-#: includes/class-didit-placements.php:288
+#: includes/class-didit-placements.php:353
+msgid "Your action is needed"
+msgstr ""
+
+#: includes/class-didit-placements.php:357
 msgid "Expired"
 msgstr ""
 
-#: includes/class-didit-placements.php:291
+#: includes/class-didit-placements.php:360
 msgid "Not finished"
 msgstr ""
 
-#: includes/class-didit-placements.php:307
-#: includes/class-didit-placements.php:319
-msgid "Status:"
+#: includes/class-didit-placements.php:374
+msgid "Continue verification"
 msgstr ""
 
-#: includes/class-didit-placements.php:309
+#: includes/class-didit-placements.php:376
 msgid "Verify again"
 msgstr ""
 
-#: includes/class-didit-placements.php:317
+#: includes/class-didit-placements.php:390
+#: includes/class-didit-placements.php:401
+msgid "Status:"
+msgstr ""
+
+#: includes/class-didit-placements.php:399
 msgid "Business account"
 msgstr ""
 
-#: includes/class-didit-placements.php:318
+#: includes/class-didit-placements.php:400
 msgid "Verify your company to buy as a business customer."
 msgstr ""
 
-#: includes/class-didit-placements.php:323
+#: includes/class-didit-placements.php:405
 msgid "Verify your business"
 msgstr ""
 
 #. translators: 1: approved people, 2: total people.
-#: includes/class-didit-report.php:120
+#: includes/class-didit-report.php:123
 #, php-format
 msgid "%1$d of %2$d people approved"
 msgstr ""
 
-#: includes/class-didit-report.php:212
-#: includes/class-didit-workflows.php:152
-#: includes/class-didit-workflows.php:153
+#. translators: %s: document group, such as "legal presence".
+#: includes/class-didit-report.php:154
+#, php-format
+msgid "missing %s"
+msgstr ""
+
+#: includes/class-didit-report.php:263
+#: includes/class-didit-workflows.php:180
+#: includes/class-didit-workflows.php:181
 msgid "ID document"
 msgstr ""
 
-#: includes/class-didit-report.php:213
-#: includes/class-didit-workflows.php:154
+#: includes/class-didit-report.php:264
+#: includes/class-didit-workflows.php:182
 msgid "NFC chip"
 msgstr ""
 
-#: includes/class-didit-report.php:214
-#: includes/class-didit-workflows.php:155
+#: includes/class-didit-report.php:265
+#: includes/class-didit-workflows.php:183
 msgid "Liveness"
 msgstr ""
 
-#: includes/class-didit-report.php:215
-#: includes/class-didit-workflows.php:156
+#: includes/class-didit-report.php:266
+#: includes/class-didit-workflows.php:184
 msgid "Face match"
 msgstr ""
 
-#: includes/class-didit-report.php:216
-#: includes/class-didit-workflows.php:157
-msgid "AML screening"
-msgstr ""
-
-#: includes/class-didit-report.php:219
-#: includes/class-didit-workflows.php:162
-#: includes/class-didit-workflows.php:163
+#: includes/class-didit-report.php:270
+#: includes/class-didit-workflows.php:190
+#: includes/class-didit-workflows.php:191
 msgid "Proof of address"
 msgstr ""
 
-#: includes/class-didit-report.php:220
-#: includes/class-didit-workflows.php:164
+#: includes/class-didit-report.php:271
+#: includes/class-didit-workflows.php:192
 msgid "Database validation"
 msgstr ""
 
-#: includes/class-didit-report.php:221
-#: includes/class-didit-workflows.php:169
+#: includes/class-didit-report.php:272
+#: includes/class-didit-workflows.php:197
 msgid "Company registry"
 msgstr ""
 
-#: includes/class-didit-report.php:222
-#: includes/class-didit-workflows.php:170
+#: includes/class-didit-report.php:273
+#: includes/class-didit-workflows.php:198
 msgid "Key people"
 msgstr ""
 
-#: includes/class-didit-report.php:223
-#: includes/class-didit-workflows.php:168
+#: includes/class-didit-report.php:274
+#: includes/class-didit-workflows.php:196
 msgid "Bank verification"
 msgstr ""
 
-#: includes/class-didit-report.php:224
-#: includes/class-didit-workflows.php:165
+#: includes/class-didit-report.php:275
+#: includes/class-didit-workflows.php:193
 msgid "IP analysis"
 msgstr ""
 
+#: includes/class-didit-report.php:276
+msgid "Business documents"
+msgstr ""
+
+#: includes/class-didit-report.php:277
+msgid "Additional documents"
+msgstr ""
+
+#: includes/class-didit-report.php:278
+#: includes/class-didit-workflows.php:195
+msgid "Questionnaire"
+msgstr ""
+
 #. translators: %d: age in years.
-#: includes/class-didit-report.php:250
+#: includes/class-didit-report.php:304
 #, php-format
 msgid "age %d"
 msgstr ""
 
 #. translators: %s: score.
-#: includes/class-didit-report.php:254
+#: includes/class-didit-report.php:308
 #, php-format
 msgid "score %s"
 msgstr ""
 
 #. translators: %s: risk level.
-#: includes/class-didit-report.php:273
+#: includes/class-didit-report.php:327
 #, php-format
 msgid "risk %s"
 msgstr ""
 
 #. translators: %s: date and time of the last screening.
-#: includes/class-didit-report.php:281
+#: includes/class-didit-report.php:335
 #, php-format
 msgid "ongoing monitoring on, last screened %s"
 msgstr ""
 
-#: includes/class-didit-report.php:282
+#: includes/class-didit-report.php:336
 msgid "ongoing monitoring on"
 msgstr ""
 
-#: includes/class-didit-report.php:283
+#: includes/class-didit-report.php:337
 msgid "ongoing monitoring off"
 msgstr ""
 
-#: includes/class-didit-report.php:309
+#: includes/class-didit-report.php:364
 msgid "sanctions"
 msgstr ""
 
-#: includes/class-didit-report.php:310
+#: includes/class-didit-report.php:365
 msgid "adverse media"
 msgstr ""
 
 #. translators: %s: match score.
-#: includes/class-didit-report.php:311
+#: includes/class-didit-report.php:366
 #, php-format
 msgid "match %s"
 msgstr ""
 
 #. translators: %s: risk score.
-#: includes/class-didit-report.php:312
+#: includes/class-didit-report.php:367
 #, php-format
 msgid "risk score %s"
 msgstr ""
 
-#: includes/class-didit-report.php:326
+#. translators: %d: number of results of this check that are not listed.
+#: includes/class-didit-report.php:386
+#, php-format
+msgid "%d more result not shown. Open the session in Didit Console to see it."
+msgid_plural "%d more results not shown. Open the session in Didit Console to see them."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/class-didit-report.php:395
 msgid "Check results appear here once Didit has a decision."
 msgstr ""
 
-#: includes/class-didit-report.php:333
+#: includes/class-didit-report.php:402
 msgid "Open in Didit Console"
 msgstr ""
 
-#: includes/class-didit-report.php:334
+#: includes/class-didit-report.php:403
 msgid "(opens in a new tab)"
 msgstr ""
 
-#: includes/class-didit-report.php:343
+#: includes/class-didit-report.php:412
 msgid "Not started"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:97
+#: includes/class-didit-sign-in.php:127
 msgid "Show \"Sign in with Didit\" on the WordPress login page"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:98
+#: includes/class-didit-sign-in.php:128
 msgid "Publishable key (Authentication → Developers)"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:100
+#: includes/class-didit-sign-in.php:130
 msgid "Application ID"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:102
+#: includes/class-didit-sign-in.php:132
 msgid "Turn on Authentication for the application in the Didit Console and register this exact redirect URL:"
 msgstr ""
 
 #. translators: %s: sign-in address.
-#: includes/class-didit-sign-in.php:104
+#: includes/class-didit-sign-in.php:134
 #, php-format
 msgid "Sign-in address: %s"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:108
+#: includes/class-didit-sign-in.php:138
 msgid "People sign in with the methods the Didit application allows, including passkeys. An account links by its verified email, except accounts that can manage the site: those link from their own profile. New accounts are only created when anyone can register."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:134
+#: includes/class-didit-sign-in.php:164
 msgid "Linked to a Didit identity."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:134
+#: includes/class-didit-sign-in.php:164
 msgid "Not linked."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:139
+#: includes/class-didit-sign-in.php:169
 msgid "Unlink"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:145
+#: includes/class-didit-sign-in.php:175
 msgid "Link my Didit identity"
 msgstr ""
 
-#: includes/class-didit-sign-in.php:156
-#: includes/class-didit-workflows.php:180
+#: includes/class-didit-sign-in.php:186
+#: includes/class-didit-workflows.php:208
 msgid "You are not allowed to do this."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:166
+#: includes/class-didit-sign-in.php:197
 msgid "Sign in with Didit is not available right now."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:167
+#: includes/class-didit-sign-in.php:198
 msgid "The Didit sign-in expired or was already used. Please try again."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:168
+#: includes/class-didit-sign-in.php:199
 msgid "The Didit sign-in did not complete."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:169
+#: includes/class-didit-sign-in.php:200
 msgid "Your Didit account has no verified email, so it cannot be matched to an account here."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:170
+#: includes/class-didit-sign-in.php:201
 msgid "This account can manage the site. Log in with your password and link Didit from your profile."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:171
+#: includes/class-didit-sign-in.php:202
 msgid "This account is linked to another Didit identity."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:172
+#: includes/class-didit-sign-in.php:203
 msgid "No account here uses this email, and registration is closed."
 msgstr ""
 
-#: includes/class-didit-sign-in.php:173
+#: includes/class-didit-sign-in.php:204
 msgid "Please create your account with the registration form first."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:205
+msgid "This account cannot sign in here."
 msgstr ""
 
 #: includes/class-didit-workflows.php:36
@@ -1339,51 +1423,53 @@ msgstr ""
 msgid "Business customers (KYB)"
 msgstr ""
 
-#: includes/class-didit-workflows.php:166
+#. translators: %s: placement name.
+#: includes/class-didit-workflows.php:86
+#, php-format
+msgid "%s: choose a workflow of the matching type (KYB for business customers, KYC everywhere else)."
+msgstr ""
+
+#: includes/class-didit-workflows.php:194
 msgid "Age estimation"
 msgstr ""
 
-#: includes/class-didit-workflows.php:167
-msgid "Questionnaire"
-msgstr ""
-
-#: includes/class-didit-workflows.php:171
+#: includes/class-didit-workflows.php:199
 msgid "Company documents"
 msgstr ""
 
-#: includes/class-didit-workflows.php:196
+#: includes/class-didit-workflows.php:224
 msgid "This application has no workflows yet. Create one in the Didit Console."
 msgstr ""
 
-#: includes/class-didit-workflows.php:199
+#: includes/class-didit-workflows.php:227
 msgid "Workflow"
 msgstr ""
 
-#: includes/class-didit-workflows.php:199
+#: includes/class-didit-workflows.php:227
 msgid "Type"
 msgstr ""
 
-#: includes/class-didit-workflows.php:199
+#: includes/class-didit-workflows.php:227
 msgid "Checks"
 msgstr ""
 
-#: includes/class-didit-workflows.php:205
+#: includes/class-didit-workflows.php:233
 msgid "Default"
 msgstr ""
 
-#: includes/class-didit-workflows.php:206
+#: includes/class-didit-workflows.php:234
 msgid "Person (KYC)"
 msgstr ""
 
-#: includes/class-didit-workflows.php:213
+#: includes/class-didit-workflows.php:241
 msgid "Refresh list"
 msgstr ""
 
-#: includes/class-didit-workflows.php:242
-#: includes/class-didit-workflows.php:258
+#: includes/class-didit-workflows.php:270
+#: includes/class-didit-workflows.php:286
 msgid "Default Workflow ID"
 msgstr ""
 
-#: includes/class-didit-workflows.php:265
+#: includes/class-didit-workflows.php:293
 msgid "Each placement starts sessions with its own workflow, so one site can ask for an ID check at registration, an age check on restricted products and a business check for trade accounts. An approval only counts for the workflow that produced it. Choose a KYB workflow for business customers."
 msgstr ""
