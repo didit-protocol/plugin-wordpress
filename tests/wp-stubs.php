@@ -83,6 +83,15 @@ function get_users($args) {
       $matches[] = $id;
     }
   }
+  // Any other user meta written during the test.
+  if (isset($args['meta_key'], $args['meta_value']) && '_didit_session_id' !== $args['meta_key']) {
+    foreach ($GLOBALS['didit_test_user_meta'] as $key => $value) {
+      list($id, $name) = explode('|', $key, 2);
+      if ($name === $args['meta_key'] && $value === $args['meta_value']) {
+        $matches[] = (int) $id;
+      }
+    }
+  }
   return array_slice($matches, 0, isset($args['number']) ? (int) $args['number'] : count($matches));
 }
 
@@ -115,6 +124,7 @@ class WP_Error {
   }
   public function get_error_code() { return $this->code; }
   public function get_error_data() { return $this->data; }
+  public function get_error_message() { return $this->message; }
 }
 
 /**

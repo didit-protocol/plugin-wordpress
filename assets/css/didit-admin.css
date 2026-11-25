@@ -56,3 +56,16 @@
   .didit-admin-header .didit-admin-logo { width: 86px; height: auto; }
   .didit-admin .didit-admin-header h1 { font-size: 21px; }
 }
+.didit-admin .form-table .didit-workflows th, .didit-admin .form-table .didit-workflows td,
+.didit-admin .form-table .didit-placements th, .didit-admin .form-table .didit-placements td { padding: 10px 12px; vertical-align: middle; border-top: 0; }
+.didit-admin .form-table .didit-placements tr + tr, .didit-admin .form-table .didit-workflows tr + tr { border-top: 1px solid var(--didit-line); }
+.didit-admin .didit-workflows code { font-size: 11px; white-space: nowrap; }
+.didit-report { margin-top: 8px; }
+.didit-report-table { border-radius: 8px; table-layout: fixed; width: 100%; }
+.didit-report-details { margin-top: 4px; color: #333; }
+.didit-report-table th, .didit-report-table td { padding: 6px 10px; vertical-align: top; font-size: 12px; }
+.didit-report-table th { width: 28%; font-weight: 500; overflow-wrap: anywhere; }
+.didit-report-table td { overflow-wrap: anywhere; }
+.didit-report-hit td { color: #555; font-size: 12px; }
+.didit-report-links { margin: 8px 0 0; font-size: 12px; }
+.didit-report-links code { display: inline; margin: 0 8px 0 0; }

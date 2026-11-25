@@ -14,10 +14,21 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-      - run: php -l didit-verify.php && php -l uninstall.php
+      - run: php -l didit-verify.php && php -l uninstall.php && for f in includes/*.php; do php -l "$f" || exit 1; done
+      - run: bin/check-version.sh
+      - run: tests/test-check-version.sh
       - run: php tests/test-shortcode-assets.php
       - run: php tests/test-webhook-signature.php
       - run: php tests/test-verification-authorization.php
       - run: php tests/test-checkout-retry.php
       - run: php tests/test-redirect-fallback.php
       - run: php tests/test-iframe-permissions.php
+      - run: php tests/test-placements.php
+      - run: php tests/test-report.php
+      - run: php tests/test-actions.php
+      - run: php tests/test-sign-in.php
+      - name: Release zip leaves development files out
+        run: |
+          bin/build-zip.sh
+          unzip -l build/didit-verify.zip | awk '{print $4}' | grep -E '^didit-verify/(tests|bin|\.github|\.claude|\.wordpress-org|docker-compose\.yml|README\.md)' && exit 1 || true
+          unzip -l build/didit-verify.zip | grep -q 'didit-verify/includes/class-didit-workflows.php'

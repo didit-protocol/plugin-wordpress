@@ -2,22 +2,22 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Didit Verify 0.3.3\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wordpress-integration-audit-20261006\n"
+"Project-Id-Version: Didit Verify 0.4.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/didit-verify\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-06T12:32:06+00:00\n"
+"POT-Creation-Date: 2026-11-25T10:38:58+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: didit-verify\n"
 
 #. Plugin Name of the plugin
 #: didit-verify.php
-#: didit-verify.php:71
-#: didit-verify.php:72
+#: didit-verify.php:88
+#: didit-verify.php:89
 msgid "Didit Verify"
 msgstr ""
 
@@ -33,7 +33,7 @@ msgstr ""
 
 #. Author of the plugin
 #: didit-verify.php
-#: didit-verify.php:2073
+#: didit-verify.php:2421
 msgid "Didit"
 msgstr ""
 
@@ -42,755 +42,1348 @@ msgstr ""
 msgid "https://didit.me"
 msgstr ""
 
-#: didit-verify.php:85
+#: didit-verify.php:102
 msgid "UniLink opens a verification flow for manual review. To protect content or checkout, use API Session mode with a Workflow ID and API Key. Only a confirmed Didit decision grants access. Users verified by older plugin versions must verify again."
 msgstr ""
 
-#: didit-verify.php:137
+#: didit-verify.php:170
 msgid "Connection"
 msgstr ""
 
-#: didit-verify.php:138
+#: didit-verify.php:171
 msgid "Mode"
 msgstr ""
 
-#: didit-verify.php:139
+#: didit-verify.php:172
 msgid "UniLink URL"
 msgstr ""
 
-#: didit-verify.php:140
+#: didit-verify.php:173
+#: includes/class-didit-workflows.php:199
 msgid "Workflow ID"
 msgstr ""
 
-#: didit-verify.php:141
+#: didit-verify.php:174
 msgid "API Key"
 msgstr ""
 
-#: didit-verify.php:143
-msgid "Session Options (API mode)"
-msgstr ""
-
-#: didit-verify.php:144
-msgid "Vendor Data"
-msgstr ""
-
-#: didit-verify.php:145
-msgid "Callback URL"
-msgstr ""
-
-#: didit-verify.php:146
-msgid "Callback Method"
-msgstr ""
-
-#: didit-verify.php:147
-msgid "Language"
-msgstr ""
-
-#: didit-verify.php:149
-msgid "Display Options"
-msgstr ""
-
-#: didit-verify.php:150
-msgid "Display Mode"
-msgstr ""
-
-#: didit-verify.php:151
-msgid "Close Button"
-msgstr ""
-
-#: didit-verify.php:152
-msgid "Exit Confirmation"
-msgstr ""
-
-#: didit-verify.php:153
-msgid "Auto-close"
-msgstr ""
-
-#: didit-verify.php:154
-msgid "Debug Logging"
-msgstr ""
-
-#: didit-verify.php:156
-msgid "Button Appearance"
-msgstr ""
-
-#: didit-verify.php:157
-msgid "Button Text"
-msgstr ""
-
-#: didit-verify.php:158
-msgid "Success Text"
-msgstr ""
-
-#: didit-verify.php:159
-msgid "Background Color"
-msgstr ""
-
-#: didit-verify.php:160
-msgid "Text Color"
-msgstr ""
-
-#: didit-verify.php:161
-msgid "Border Radius"
-msgstr ""
-
-#: didit-verify.php:162
-msgid "Padding"
-msgstr ""
-
-#: didit-verify.php:163
-msgid "Font Size"
-msgstr ""
-
-#: didit-verify.php:165
-msgid "Security"
-msgstr ""
-
-#: didit-verify.php:166
-msgid "Require Login"
-msgstr ""
-
-#: didit-verify.php:167
-msgid "Webhook Secret"
-msgstr ""
-
-#: didit-verify.php:169
-msgid "WooCommerce"
-msgstr ""
-
-#: didit-verify.php:170
-msgid "Verification Mode"
-msgstr ""
-
-#: didit-verify.php:171
-msgid "Product Scope"
-msgstr ""
-
-#: didit-verify.php:172
-msgid "Position"
-msgstr ""
-
-#: didit-verify.php:173
-msgid "Section Title"
-msgstr ""
-
-#: didit-verify.php:174
-msgid "Checkout Message"
-msgstr ""
-
-#: didit-verify.php:175
-msgid "Post-purchase Message"
-msgstr ""
-
 #: didit-verify.php:176
-msgid "Send Billing Data"
+msgid "Workflows and placements"
 msgstr ""
 
 #: didit-verify.php:177
-msgid "Hold Orders"
+msgid "Your workflows"
 msgstr ""
 
 #: didit-verify.php:178
-msgid "Reminders"
+msgid "Placements"
+msgstr ""
+
+#: didit-verify.php:179
+msgid "Age-restricted categories"
+msgstr ""
+
+#: didit-verify.php:180
+msgid "Console link"
+msgstr ""
+
+#: didit-verify.php:182
+msgid "Direct checks"
+msgstr ""
+
+#: didit-verify.php:183
+msgid "AML screening at checkout"
+msgstr ""
+
+#: didit-verify.php:184
+msgid "Phone and email"
+msgstr ""
+
+#: didit-verify.php:186
+#: includes/class-didit-sign-in.php:123
+#: includes/class-didit-sign-in.php:133
+msgid "Sign in with Didit"
+msgstr ""
+
+#: didit-verify.php:187
+msgid "Sign-in"
+msgstr ""
+
+#: didit-verify.php:189
+msgid "Session Options (API mode)"
+msgstr ""
+
+#: didit-verify.php:190
+msgid "Vendor Data"
+msgstr ""
+
+#: didit-verify.php:191
+msgid "Callback URL"
+msgstr ""
+
+#: didit-verify.php:192
+msgid "Callback Method"
+msgstr ""
+
+#: didit-verify.php:193
+msgid "Language"
+msgstr ""
+
+#: didit-verify.php:195
+msgid "Display Options"
+msgstr ""
+
+#: didit-verify.php:196
+msgid "Display Mode"
+msgstr ""
+
+#: didit-verify.php:197
+msgid "Close Button"
+msgstr ""
+
+#: didit-verify.php:198
+msgid "Exit Confirmation"
+msgstr ""
+
+#: didit-verify.php:199
+msgid "Auto-close"
+msgstr ""
+
+#: didit-verify.php:200
+msgid "Debug Logging"
+msgstr ""
+
+#: didit-verify.php:202
+msgid "Button Appearance"
+msgstr ""
+
+#: didit-verify.php:203
+msgid "Button Text"
+msgstr ""
+
+#: didit-verify.php:204
+msgid "Success Text"
+msgstr ""
+
+#: didit-verify.php:205
+msgid "Background Color"
+msgstr ""
+
+#: didit-verify.php:206
+msgid "Text Color"
+msgstr ""
+
+#: didit-verify.php:207
+msgid "Border Radius"
 msgstr ""
 
 #: didit-verify.php:208
-msgid "UniLink — no backend needed"
+msgid "Padding"
 msgstr ""
 
-#: didit-verify.php:210
-msgid "API Session — recommended for production"
+#: didit-verify.php:209
+msgid "Font Size"
 msgstr ""
 
 #: didit-verify.php:211
-msgid "UniLink uses a fixed URL. API mode creates a unique session per user (requires Workflow ID + API Key)."
+msgid "Security"
+msgstr ""
+
+#: didit-verify.php:212
+msgid "Require Login"
+msgstr ""
+
+#: didit-verify.php:213
+msgid "Webhook Secret"
+msgstr ""
+
+#: didit-verify.php:215
+msgid "WooCommerce"
+msgstr ""
+
+#: didit-verify.php:216
+msgid "Verification Mode"
+msgstr ""
+
+#: didit-verify.php:217
+msgid "Product Scope"
+msgstr ""
+
+#: didit-verify.php:218
+msgid "Position"
+msgstr ""
+
+#: didit-verify.php:219
+msgid "Section Title"
+msgstr ""
+
+#: didit-verify.php:220
+msgid "Checkout Message"
 msgstr ""
 
 #: didit-verify.php:221
+msgid "Post-purchase Message"
+msgstr ""
+
+#: didit-verify.php:222
+msgid "Send Billing Data"
+msgstr ""
+
+#: didit-verify.php:223
+msgid "Hold Orders"
+msgstr ""
+
+#: didit-verify.php:224
+msgid "Reminders"
+msgstr ""
+
+#: didit-verify.php:254
+msgid "UniLink — no backend needed"
+msgstr ""
+
+#: didit-verify.php:256
+msgid "API Session — recommended for production"
+msgstr ""
+
+#: didit-verify.php:257
+msgid "UniLink uses a fixed URL. API mode creates a unique session per user (requires Workflow ID + API Key)."
+msgstr ""
+
+#: didit-verify.php:267
 msgid "Get this from Didit Console → Your Workflow → Copy Link."
 msgstr ""
 
-#: didit-verify.php:231
+#: didit-verify.php:277
 msgid "Required for API mode. Found in Didit Console → Workflows."
 msgstr ""
 
-#: didit-verify.php:241
+#: didit-verify.php:287
 msgid "Found in Didit Console → API & Webhooks. Used by your WordPress server to create and confirm sessions. Keep it private."
 msgstr ""
 
-#: didit-verify.php:262
+#: didit-verify.php:297
+msgid "Paste the address of any page of this application in the Didit Console. Orders and user profiles then link straight to each verification. Without it, the link opens the console home."
+msgstr ""
+
+#: didit-verify.php:318
 msgid "WordPress User ID (e.g. wp-42)"
 msgstr ""
 
-#: didit-verify.php:264
+#: didit-verify.php:320
 msgid "User Email (e.g. john@example.com)"
 msgstr ""
 
-#: didit-verify.php:266
+#: didit-verify.php:322
 msgid "Custom prefix + User ID"
 msgstr ""
 
-#: didit-verify.php:268
+#: didit-verify.php:324
 msgid "None — do not send vendor data"
 msgstr ""
 
-#: didit-verify.php:269
+#: didit-verify.php:325
 msgid "Identifies each user in the Didit dashboard. Allows session tracking and aggregation across multiple verifications."
 msgstr ""
 
-#: didit-verify.php:272
+#: didit-verify.php:328
 msgid "Prefix prepended to the User ID (e.g. \"mystore-\" → \"mystore-42\"). Leave empty for just the ID."
 msgstr ""
 
-#: didit-verify.php:282
+#: didit-verify.php:338
 msgid "URL to redirect the user after verification completes. Didit appends verificationSessionId and status as query parameters. Leave empty to disable."
 msgstr ""
 
-#: didit-verify.php:298
+#: didit-verify.php:354
 msgid "— Default (initiator) —"
 msgstr ""
 
-#: didit-verify.php:300
+#: didit-verify.php:356
 msgid "Initiator — redirect the device that started the flow"
 msgstr ""
 
-#: didit-verify.php:302
+#: didit-verify.php:358
 msgid "Completer — redirect the device that finishes the flow"
 msgstr ""
 
-#: didit-verify.php:304
+#: didit-verify.php:360
 msgid "Both — either device can trigger the callback"
 msgstr ""
 
-#: didit-verify.php:305
+#: didit-verify.php:361
 msgid "Determines which device handles the redirect to the callback URL after verification."
 msgstr ""
 
-#: didit-verify.php:370
+#: didit-verify.php:431
 msgid "Language for the verification UI shown to the user. Auto-detect uses the browser language."
 msgstr ""
 
-#: didit-verify.php:385
+#: didit-verify.php:446
 msgid "Modal (popup) — opens over the page"
 msgstr ""
 
-#: didit-verify.php:387
+#: didit-verify.php:448
 msgid "Embedded (inline) — appears where the shortcode is placed"
 msgstr ""
 
-#: didit-verify.php:389
+#: didit-verify.php:450
 msgid "Redirect — opens the hosted verification page in the browser"
 msgstr ""
 
-#: didit-verify.php:390
+#: didit-verify.php:451
 msgid "Modal opens a centered overlay. Embedded renders the verification directly on the page where you placed [didit_verify] or the WooCommerce checkout section."
 msgstr ""
 
-#: didit-verify.php:391
+#: didit-verify.php:452
 msgid "Choose Redirect when the camera cannot open inside a frame, for example the liveness step on Android Chrome. The shopper finishes on Didit's page and returns to the page where they started."
 msgstr ""
 
-#: didit-verify.php:396
+#: didit-verify.php:462
 msgid "Show close (X) button on the verification modal"
 msgstr ""
 
-#: didit-verify.php:397
+#: didit-verify.php:463
 msgid "Uncheck to force users to complete verification (no way to close the modal). Useful for mandatory verification flows."
 msgstr ""
 
-#: didit-verify.php:407
+#: didit-verify.php:473
 msgid "Show \"Are you sure?\" dialog when closing the modal"
 msgstr ""
 
-#: didit-verify.php:408
+#: didit-verify.php:474
 msgid "Prevents accidental exits. Uncheck for a frictionless experience."
 msgstr ""
 
-#: didit-verify.php:418
+#: didit-verify.php:484
 msgid "Automatically close the modal when verification completes"
 msgstr ""
 
-#: didit-verify.php:419
+#: didit-verify.php:485
 msgid "If unchecked, the modal stays open showing the result. Useful for WooCommerce checkout to return the user to the order flow quickly."
 msgstr ""
 
-#: didit-verify.php:429
+#: didit-verify.php:495
 msgid "Enable SDK debug logging in the browser console"
 msgstr ""
 
-#: didit-verify.php:430
+#: didit-verify.php:496
 msgid "Logs all postMessage events and state changes. Only enable for troubleshooting."
 msgstr ""
 
-#: didit-verify.php:446
+#: didit-verify.php:512
 msgid "Live preview — changes update when you modify the fields below."
 msgstr ""
 
-#: didit-verify.php:472
-#: didit-verify.php:682
+#: didit-verify.php:538
+#: didit-verify.php:748
+#: includes/class-didit-placements.php:309
 msgid "Verify your Identity"
 msgstr ""
 
-#: didit-verify.php:473
+#: didit-verify.php:539
 msgid "Label shown on the button before verification. Leave empty to use the default text, which follows the site language."
 msgstr ""
 
-#: didit-verify.php:483
-#: didit-verify.php:687
+#: didit-verify.php:549
+#: didit-verify.php:753
 msgid "Identity Verified ✓"
 msgstr ""
 
-#: didit-verify.php:484
+#: didit-verify.php:550
 msgid "Label shown after successful verification. Leave empty to use the default text, which follows the site language."
 msgstr ""
 
-#: didit-verify.php:494
+#: didit-verify.php:560
 msgid "Button background color."
 msgstr ""
 
-#: didit-verify.php:504
+#: didit-verify.php:570
 msgid "Button text color."
 msgstr ""
 
-#: didit-verify.php:514
+#: didit-verify.php:580
 msgid "Corner rounding in pixels. 0 = square, 50 = pill shape."
 msgstr ""
 
-#: didit-verify.php:526
+#: didit-verify.php:592
 msgid "Vertical × Horizontal padding in pixels."
 msgstr ""
 
-#: didit-verify.php:536
+#: didit-verify.php:602
 msgid "Button font size in pixels."
 msgstr ""
 
-#: didit-verify.php:546
+#: didit-verify.php:612
 msgid "Only logged-in WordPress users can create verification sessions"
 msgstr ""
 
-#: didit-verify.php:547
+#: didit-verify.php:613
 msgid "Strongly recommended. Prevents anonymous abuse. Uncheck only if you need guest checkout in WooCommerce."
 msgstr ""
 
-#: didit-verify.php:554
-#: didit-verify.php:578
-#: didit-verify.php:602
-#: didit-verify.php:617
-#: didit-verify.php:650
-#: didit-verify.php:708
-#: didit-verify.php:723
-#: didit-verify.php:738
-#: didit-verify.php:753
+#: didit-verify.php:620
+#: didit-verify.php:644
+#: didit-verify.php:668
+#: didit-verify.php:683
+#: didit-verify.php:716
+#: didit-verify.php:774
+#: didit-verify.php:789
+#: didit-verify.php:804
+#: didit-verify.php:819
+#: includes/class-didit-placements.php:135
 msgid "WooCommerce is not active."
 msgstr ""
 
-#: didit-verify.php:566
+#: didit-verify.php:632
 msgid "Off — no verification in WooCommerce"
 msgstr ""
 
-#: didit-verify.php:568
+#: didit-verify.php:634
 msgid "Require at checkout — order cannot be placed until verified"
 msgstr ""
 
-#: didit-verify.php:570
+#: didit-verify.php:636
 msgid "After purchase — low-barrier checkout, verify on the order confirmation page"
 msgstr ""
 
-#: didit-verify.php:571
+#: didit-verify.php:637
 msgid "After-purchase mode shows the verification box on the order confirmation page, My Account order view, and order emails."
 msgstr ""
 
-#: didit-verify.php:590
+#: didit-verify.php:656
 msgid "All products — verification applies to every order"
 msgstr ""
 
-#: didit-verify.php:592
+#: didit-verify.php:658
 msgid "Only selected products — require verification only when the cart contains a selected product"
 msgstr ""
 
-#: didit-verify.php:594
+#: didit-verify.php:660
 msgid "All products except selected — skip verification only when every product in the cart is selected"
 msgstr ""
 
-#: didit-verify.php:595
+#: didit-verify.php:661
 msgid "Select products on the product edit page: Product data → Advanced → \"Didit verification\". Mixed carts require verification whenever at least one product in the cart requires it."
 msgstr ""
 
-#: didit-verify.php:609
+#: didit-verify.php:675
 msgid "Hold orders (status \"On hold\") until identity verification is approved"
 msgstr ""
 
-#: didit-verify.php:610
+#: didit-verify.php:676
 msgid "After-purchase mode only. Orders are released to \"Processing\" automatically when the Didit webhook reports approval — configure the Webhook Secret below for this to work."
 msgstr ""
 
-#: didit-verify.php:626
+#: didit-verify.php:692
 msgid "Email customers who have not completed verification"
 msgstr ""
 
-#: didit-verify.php:627
+#: didit-verify.php:693
 msgid "Every"
 msgstr ""
 
-#: didit-verify.php:629
+#: didit-verify.php:695
 msgid "day(s), at most"
 msgstr ""
 
-#: didit-verify.php:631
+#: didit-verify.php:697
 msgid "reminder(s) per order."
 msgstr ""
 
-#: didit-verify.php:632
+#: didit-verify.php:698
 msgid "After-purchase mode only. Reminders stop as soon as the verification is approved or declined, or the order is cancelled."
 msgstr ""
 
-#: didit-verify.php:642
+#: didit-verify.php:708
 msgid "Webhook secret from the Didit Business Console (API & Webhooks). Point the webhook destination to:"
 msgstr ""
 
-#: didit-verify.php:663
+#: didit-verify.php:729
 msgid "Top of checkout page — verify before filling the form"
 msgstr ""
 
-#: didit-verify.php:665
+#: didit-verify.php:731
 msgid "After billing details — verify after entering name & address"
 msgstr ""
 
-#: didit-verify.php:667
+#: didit-verify.php:733
 msgid "After order notes — verify after all customer fields"
 msgstr ""
 
-#: didit-verify.php:669
+#: didit-verify.php:735
 msgid "Before \"Place Order\" (recommended) — last step before payment"
 msgstr ""
 
-#: didit-verify.php:670
+#: didit-verify.php:736
 msgid "Where the verification section appears on the checkout page."
 msgstr ""
 
-#: didit-verify.php:692
-#: didit-verify.php:715
+#: didit-verify.php:758
+#: didit-verify.php:781
 msgid "Identity Verification"
 msgstr ""
 
-#: didit-verify.php:697
-#: didit-verify.php:730
+#: didit-verify.php:763
+#: didit-verify.php:796
 msgid "Please verify your identity before placing your order."
 msgstr ""
 
-#: didit-verify.php:702
-#: didit-verify.php:745
+#: didit-verify.php:768
+#: didit-verify.php:811
 msgid "Please verify your identity to complete your order."
 msgstr ""
 
-#: didit-verify.php:716
+#: didit-verify.php:782
 msgid "Heading of the verification section at checkout and after purchase. Leave empty to use the default text, which follows the site language."
 msgstr ""
 
-#: didit-verify.php:731
+#: didit-verify.php:797
 msgid "Message shown in the verification section on the checkout page. Leave empty to use the default text, which follows the site language."
 msgstr ""
 
-#: didit-verify.php:746
+#: didit-verify.php:812
 msgid "Message shown in the verification section after purchase (order confirmation page, My Account, emails). Leave empty to use the default text, which follows the site language."
 msgstr ""
 
-#: didit-verify.php:760
+#: didit-verify.php:826
 msgid "Auto-send checkout billing data as expected_details & contact_details"
 msgstr ""
 
-#: didit-verify.php:761
+#: didit-verify.php:827
 msgid "Sends name, email, phone, address, and country from the checkout form to Didit for pre-filling and cross-checking."
 msgstr ""
 
-#: didit-verify.php:775
+#: didit-verify.php:841
 msgid "Identity verification"
 msgstr ""
 
-#: didit-verify.php:776
+#: didit-verify.php:842
 msgid "Connect your workflow, customize verification, and manage customer access."
 msgstr ""
 
-#: didit-verify.php:778
+#: didit-verify.php:844
 msgid "Documentation"
 msgstr ""
 
-#: didit-verify.php:782
+#: didit-verify.php:848
 msgid "Verification results"
 msgstr ""
 
-#: didit-verify.php:783
+#: didit-verify.php:849
 msgid "See customer status in Users and session decisions on WooCommerce orders. Open Didit Console for the full verification report."
 msgstr ""
 
-#: didit-verify.php:785
+#: didit-verify.php:851
 msgid "View users"
 msgstr ""
 
-#: didit-verify.php:786
+#: didit-verify.php:852
 msgid "Open Didit Console"
 msgstr ""
 
-#: didit-verify.php:807
+#: didit-verify.php:873
 msgid "Shortcodes"
 msgstr ""
 
-#: didit-verify.php:810
+#: didit-verify.php:876
 msgid "Verification button styled with the settings above. Place on any page or post."
 msgstr ""
 
-#: didit-verify.php:814
+#: didit-verify.php:880
 msgid "Override the button text for a specific page."
 msgstr ""
 
-#: didit-verify.php:816
+#: didit-verify.php:882
 msgid "Status & Content Gating"
 msgstr ""
 
-#: didit-verify.php:819
+#: didit-verify.php:885
 msgid "Shows \"Identity Verified\" or \"Not Verified\" for the logged-in user."
 msgstr ""
 
-#: didit-verify.php:823
+#: didit-verify.php:889
 msgid "Content inside is only visible to verified users. Others see a verification prompt."
 msgstr ""
 
-#: didit-verify.php:855
+#: didit-verify.php:921
+#: includes/class-didit-actions.php:217
 msgid "Invalid security token."
 msgstr ""
 
-#: didit-verify.php:864
+#: didit-verify.php:931
+#: didit-verify.php:973
 msgid "You must be logged in to start verification."
 msgstr ""
 
-#: didit-verify.php:898
+#: didit-verify.php:967
+#: didit-verify.php:970
+msgid "This verification is not available."
+msgstr ""
+
+#: didit-verify.php:1011
 msgid "Didit API credentials are not configured."
 msgstr ""
 
-#: didit-verify.php:1019
+#: didit-verify.php:1126
 msgid "Didit API error"
 msgstr ""
 
-#: didit-verify.php:1029
+#: didit-verify.php:1136
 msgid "No verification URL returned."
 msgstr ""
 
 #. translators: %s: Didit session id.
-#: didit-verify.php:1056
+#: didit-verify.php:1168
 #, php-format
 msgid "Didit: verification session created (%s)."
 msgstr ""
 
-#: didit-verify.php:1137
+#: didit-verify.php:1326
 msgid "Start a new verification from this page."
 msgstr ""
 
-#: didit-verify.php:1141
+#: didit-verify.php:1354
 msgid "API Session mode is required to confirm verification."
 msgstr ""
 
-#: didit-verify.php:1148
-#: didit-verify.php:1153
+#: didit-verify.php:1361
+#: didit-verify.php:1366
 msgid "Unable to confirm verification. Please try again."
 msgstr ""
 
-#: didit-verify.php:1378
+#: didit-verify.php:1698
 msgid "Webhook secret is not configured."
 msgstr ""
 
-#: didit-verify.php:1384
-#: didit-verify.php:1424
+#: didit-verify.php:1704
+#: didit-verify.php:1745
 msgid "Invalid webhook payload."
 msgstr ""
 
-#: didit-verify.php:1398
+#: didit-verify.php:1718
 msgid "Missing or stale webhook signature."
 msgstr ""
 
-#: didit-verify.php:1414
+#: didit-verify.php:1734
 msgid "Webhook signature mismatch."
 msgstr ""
 
-#: didit-verify.php:1457
+#: didit-verify.php:1768
+msgid "Unable to read the decision. Retry later."
+msgstr ""
+
+#: didit-verify.php:1797
 msgid "Too many verification requests. Please try again later."
 msgstr ""
 
 #. translators: 1: verification status, 2: source (browser/webhook).
-#: didit-verify.php:1811
+#: didit-verify.php:2151
 #, php-format
 msgid "Didit: verification status \"%1$s\" (via %2$s)."
 msgstr ""
 
-#: didit-verify.php:1820
+#: didit-verify.php:2160
 msgid "Didit: identity verified - order released."
 msgstr ""
 
-#: didit-verify.php:1936
+#: didit-verify.php:2276
 msgid "Creating session…"
 msgstr ""
 
-#: didit-verify.php:1937
+#: didit-verify.php:2277
 msgid "Your verification is being reviewed. Check again shortly."
 msgstr ""
 
-#: didit-verify.php:1938
+#: didit-verify.php:2278
 msgid "Confirming verification…"
 msgstr ""
 
-#: didit-verify.php:1939
+#: didit-verify.php:2279
 msgid "Check status"
 msgstr ""
 
-#: didit-verify.php:1940
+#: didit-verify.php:2280
 msgid "Identity verified. You can continue."
 msgstr ""
 
-#: didit-verify.php:1941
+#: didit-verify.php:2281
 msgid "Verification declined. Please try again."
 msgstr ""
 
-#: didit-verify.php:1942
+#: didit-verify.php:2282
 msgid "Verification expired. Please start again."
 msgstr ""
 
-#: didit-verify.php:1943
+#: didit-verify.php:2283
 msgid "Verification submitted. Your result is available from the service provider."
 msgstr ""
 
-#: didit-verify.php:1944
+#: didit-verify.php:2284
 msgid "Verification error:"
 msgstr ""
 
-#: didit-verify.php:1945
+#: didit-verify.php:2285
 msgid "No verification URL returned"
 msgstr ""
 
-#: didit-verify.php:2013
+#: didit-verify.php:2361
 msgid "Identity Verified"
 msgstr ""
 
-#: didit-verify.php:2014
+#: didit-verify.php:2362
 msgid "Not Verified"
 msgstr ""
 
-#: didit-verify.php:2015
+#: didit-verify.php:2363
 msgid "Verification Declined"
 msgstr ""
 
-#: didit-verify.php:2016
+#: didit-verify.php:2364
 msgid "Verification In Review"
 msgstr ""
 
-#: didit-verify.php:2017
+#: didit-verify.php:2365
 msgid "Please log in"
 msgstr ""
 
-#: didit-verify.php:2042
+#: didit-verify.php:2390
 msgid "Please verify your identity to access this content."
 msgstr ""
 
-#: didit-verify.php:2048
+#: didit-verify.php:2396
 msgid "Please log in to access this content."
 msgstr ""
 
-#: didit-verify.php:2060
+#: didit-verify.php:2408
 msgid "Your identity verification is being reviewed. Please check back shortly."
 msgstr ""
 
+#: didit-verify.php:2423
+msgid "Didit KYB"
+msgstr ""
+
 #. translators: %s: date when user was verified
-#: didit-verify.php:2087
+#: didit-verify.php:2441
 #, php-format
 msgid "Verified on %s"
 msgstr ""
 
 #. translators: %s: date when user was verified
-#: didit-verify.php:2087
+#: didit-verify.php:2441
 msgid "Approved"
 msgstr ""
 
 #. translators: %s: date when the verification was declined
-#: didit-verify.php:2092
+#: didit-verify.php:2446
 #, php-format
 msgid "Declined on %s"
 msgstr ""
 
 #. translators: %s: date when the verification was declined
-#: didit-verify.php:2092
+#: didit-verify.php:2446
+#: includes/class-didit-placements.php:280
 msgid "Declined"
 msgstr ""
 
 #. translators: %s: date when the verification status was last updated
-#: didit-verify.php:2097
+#: didit-verify.php:2451
 #, php-format
 msgid "Updated on %s"
 msgstr ""
 
-#: didit-verify.php:2107
+#: didit-verify.php:2461
+#: includes/class-didit-placements.php:293
 msgid "Not verified"
 msgstr ""
 
-#: didit-verify.php:2155
+#: didit-verify.php:2509
+#: didit-verify.php:2605
+#: didit-verify.php:2654
 msgid "Didit verification"
 msgstr ""
 
-#: didit-verify.php:2156
+#: didit-verify.php:2510
 msgid "Select this product for the \"Only selected products\" / \"All products except selected\" scope in the Didit Verify settings."
 msgstr ""
 
-#: didit-verify.php:2209
-#: didit-verify.php:2523
+#: didit-verify.php:2571
+#: didit-verify.php:2958
 msgid "Please complete identity verification before placing your order."
 msgstr ""
 
-#: didit-verify.php:2232
+#: didit-verify.php:2594
 msgid "Didit Verification:"
 msgstr ""
 
-#: didit-verify.php:2290
+#: didit-verify.php:2641
+msgid "Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit."
+msgstr ""
+
+#: didit-verify.php:2655
+#: includes/class-didit-placements.php:307
+msgid "Identity"
+msgstr ""
+
+#: didit-verify.php:2662
+#: includes/class-didit-workflows.php:206
+msgid "Business (KYB)"
+msgstr ""
+
+#: didit-verify.php:2724
 msgid "Your identity has been verified. Thank you!"
 msgstr ""
 
-#: didit-verify.php:2301
+#: didit-verify.php:2735
 msgid "Your verification is being reviewed. No further action is needed."
 msgstr ""
 
-#: didit-verify.php:2306
+#: didit-verify.php:2740
 msgid "Your previous verification attempt was declined. Please try again."
 msgstr ""
 
-#: didit-verify.php:2361
+#: didit-verify.php:2796
 msgid "Didit: order held until identity verification is approved."
 msgstr ""
 
-#: didit-verify.php:2380
-#: didit-verify.php:2389
+#: didit-verify.php:2815
+#: didit-verify.php:2824
 msgid "Please verify your identity to complete your order:"
 msgstr ""
 
-#: didit-verify.php:2388
+#: didit-verify.php:2823
 msgid "Identity verification required"
 msgstr ""
 
-#: didit-verify.php:2391
+#: didit-verify.php:2826
 msgid "Verify your identity"
 msgstr ""
 
 #. translators: %s: order number.
-#: didit-verify.php:2431
+#: didit-verify.php:2866
 #, php-format
 msgid "Action required: verify your identity for order #%s"
 msgstr ""
 
-#: didit-verify.php:2436
+#: didit-verify.php:2871
 msgid "Your order is waiting for identity verification. It only takes a couple of minutes."
 msgstr ""
 
-#: didit-verify.php:2438
+#: didit-verify.php:2873
 msgid "Verify your identity now"
 msgstr ""
 
 #. translators: 1: reminder number, 2: max reminders, 3: recipient email.
-#: didit-verify.php:2447
+#: didit-verify.php:2882
 #, php-format
 msgid "Didit: verification reminder %1$d of %2$d sent to %3$s."
+msgstr ""
+
+#: includes/class-didit-actions.php:54
+msgid "Screen the billing name against sanctions and PEP lists"
+msgstr ""
+
+#: includes/class-didit-actions.php:55
+msgid "When the order total is at least"
+msgstr ""
+
+#: includes/class-didit-actions.php:58
+msgid "Keep screened customers under ongoing monitoring"
+msgstr ""
+
+#: includes/class-didit-actions.php:60
+msgid "Put the order on hold when the screening needs review or is declined"
+msgstr ""
+
+#: includes/class-didit-actions.php:61
+msgid "Runs in the background after the order is placed, in the store currency. The result appears on the order. Admins can run it again from the order actions."
+msgstr ""
+
+#: includes/class-didit-actions.php:72
+msgid "Ask customers to confirm the billing phone with a one-time code"
+msgstr ""
+
+#: includes/class-didit-actions.php:74
+msgid "Ask customers to confirm the billing email with a one-time code"
+msgstr ""
+
+#: includes/class-didit-actions.php:75
+msgid "Shown on the order confirmation page and in My Account → Orders, for classic and block checkout. Codes go only to the contact on the order."
+msgstr ""
+
+#: includes/class-didit-actions.php:114
+msgid "Run Didit AML screening"
+msgstr ""
+
+#. translators: %s: error message.
+#: includes/class-didit-actions.php:150
+#, php-format
+msgid "Didit: AML screening could not run (%s). Run it again from the order actions."
+msgstr ""
+
+#. translators: 1: AML status, 2: number of hits.
+#: includes/class-didit-actions.php:160
+#, php-format
+msgid "Didit: AML screening of the billing name: %1$s, %2$d hit(s)."
+msgstr ""
+
+#: includes/class-didit-actions.php:167
+msgid "Didit: order held until the AML screening is reviewed."
+msgstr ""
+
+#: includes/class-didit-actions.php:185
+msgid "Didit checks on this order:"
+msgstr ""
+
+#: includes/class-didit-actions.php:219
+msgid "Order not found."
+msgstr ""
+
+#: includes/class-didit-actions.php:239
+msgid "This check is not available."
+msgstr ""
+
+#: includes/class-didit-actions.php:289
+msgid "The order has no contact to verify."
+msgstr ""
+
+#: includes/class-didit-actions.php:292
+msgid "Too many codes requested. Please try again later."
+msgstr ""
+
+#: includes/class-didit-actions.php:303
+msgid "We could not send a code to this contact. Please contact the store."
+msgstr ""
+
+#: includes/class-didit-actions.php:318
+msgid "Enter the code you received."
+msgstr ""
+
+#: includes/class-didit-actions.php:321
+msgid "Too many attempts. Please try again later."
+msgstr ""
+
+#: includes/class-didit-actions.php:331
+msgid "That code is not valid. Check it or request a new one."
+msgstr ""
+
+#: includes/class-didit-actions.php:335
+msgid "Didit: billing phone verified with a one-time code."
+msgstr ""
+
+#: includes/class-didit-actions.php:336
+msgid "Didit: billing email verified with a one-time code."
+msgstr ""
+
+#: includes/class-didit-actions.php:363
+#: includes/class-didit-report.php:217
+#: includes/class-didit-workflows.php:158
+#: includes/class-didit-workflows.php:159
+msgid "Phone"
+msgstr ""
+
+#: includes/class-didit-actions.php:363
+#: includes/class-didit-report.php:218
+#: includes/class-didit-workflows.php:160
+#: includes/class-didit-workflows.php:161
+msgid "Email"
+msgstr ""
+
+#: includes/class-didit-actions.php:382
+msgid "Send code"
+msgstr ""
+
+#: includes/class-didit-actions.php:383
+msgid "Code"
+msgstr ""
+
+#: includes/class-didit-actions.php:384
+msgid "Confirm"
+msgstr ""
+
+#: includes/class-didit-actions.php:398
+msgid "Code sent. Enter it below."
+msgstr ""
+
+#: includes/class-didit-actions.php:399
+msgid "Verified. Thank you!"
+msgstr ""
+
+#: includes/class-didit-actions.php:400
+msgid "Something went wrong. Please try again."
+msgstr ""
+
+#: includes/class-didit-actions.php:405
+msgid "Confirm your contact details"
+msgstr ""
+
+#: includes/class-didit-actions.php:406
+msgid "We send a one-time code to the contact on this order."
+msgstr ""
+
+#: includes/class-didit-api.php:30
+#: includes/class-didit-workflows.php:191
+msgid "Add your Didit API key first."
+msgstr ""
+
+#: includes/class-didit-api.php:45
+msgid "Didit could not be reached. Please try again."
+msgstr ""
+
+#: includes/class-didit-api.php:50
+msgid "Didit rejected the API key. Check it in the Connection settings."
+msgstr ""
+
+#: includes/class-didit-api.php:53
+msgid "Didit returned an error. Please try again."
+msgstr ""
+
+#: includes/class-didit-placements.php:103
+msgid "Please verify your identity before creating your account."
+msgstr ""
+
+#: includes/class-didit-placements.php:147
+msgid "Products in these categories, and products marked \"Age-restricted\" in Product data → Advanced, can only be added to the cart after an approval from the age-restricted workflow."
+msgstr ""
+
+#: includes/class-didit-placements.php:156
+msgid "Age-restricted"
+msgstr ""
+
+#: includes/class-didit-placements.php:157
+msgid "Ask for an approval from the age-restricted workflow before this product can be bought."
+msgstr ""
+
+#: includes/class-didit-placements.php:192
+msgid "This product is age-restricted. Please verify your age to buy it."
+msgstr ""
+
+#: includes/class-didit-placements.php:222
+msgid "Your cart contains age-restricted products. Please verify your age before checking out."
+msgstr ""
+
+#: includes/class-didit-placements.php:238
+msgid "Verify my age"
+msgstr ""
+
+#: includes/class-didit-placements.php:270
+msgid "Verification"
+msgstr ""
+
+#: includes/class-didit-placements.php:278
+msgid "Verified"
+msgstr ""
+
+#: includes/class-didit-placements.php:284
+msgid "Being reviewed"
+msgstr ""
+
+#: includes/class-didit-placements.php:288
+msgid "Expired"
+msgstr ""
+
+#: includes/class-didit-placements.php:291
+msgid "Not finished"
+msgstr ""
+
+#: includes/class-didit-placements.php:307
+#: includes/class-didit-placements.php:319
+msgid "Status:"
+msgstr ""
+
+#: includes/class-didit-placements.php:309
+msgid "Verify again"
+msgstr ""
+
+#: includes/class-didit-placements.php:317
+msgid "Business account"
+msgstr ""
+
+#: includes/class-didit-placements.php:318
+msgid "Verify your company to buy as a business customer."
+msgstr ""
+
+#: includes/class-didit-placements.php:323
+msgid "Verify your business"
+msgstr ""
+
+#. translators: 1: approved people, 2: total people.
+#: includes/class-didit-report.php:120
+#, php-format
+msgid "%1$d of %2$d people approved"
+msgstr ""
+
+#: includes/class-didit-report.php:212
+#: includes/class-didit-workflows.php:152
+#: includes/class-didit-workflows.php:153
+msgid "ID document"
+msgstr ""
+
+#: includes/class-didit-report.php:213
+#: includes/class-didit-workflows.php:154
+msgid "NFC chip"
+msgstr ""
+
+#: includes/class-didit-report.php:214
+#: includes/class-didit-workflows.php:155
+msgid "Liveness"
+msgstr ""
+
+#: includes/class-didit-report.php:215
+#: includes/class-didit-workflows.php:156
+msgid "Face match"
+msgstr ""
+
+#: includes/class-didit-report.php:216
+#: includes/class-didit-workflows.php:157
+msgid "AML screening"
+msgstr ""
+
+#: includes/class-didit-report.php:219
+#: includes/class-didit-workflows.php:162
+#: includes/class-didit-workflows.php:163
+msgid "Proof of address"
+msgstr ""
+
+#: includes/class-didit-report.php:220
+#: includes/class-didit-workflows.php:164
+msgid "Database validation"
+msgstr ""
+
+#: includes/class-didit-report.php:221
+#: includes/class-didit-workflows.php:169
+msgid "Company registry"
+msgstr ""
+
+#: includes/class-didit-report.php:222
+#: includes/class-didit-workflows.php:170
+msgid "Key people"
+msgstr ""
+
+#: includes/class-didit-report.php:223
+#: includes/class-didit-workflows.php:168
+msgid "Bank verification"
+msgstr ""
+
+#: includes/class-didit-report.php:224
+#: includes/class-didit-workflows.php:165
+msgid "IP analysis"
+msgstr ""
+
+#. translators: %d: age in years.
+#: includes/class-didit-report.php:250
+#, php-format
+msgid "age %d"
+msgstr ""
+
+#. translators: %s: score.
+#: includes/class-didit-report.php:254
+#, php-format
+msgid "score %s"
+msgstr ""
+
+#. translators: %s: risk level.
+#: includes/class-didit-report.php:273
+#, php-format
+msgid "risk %s"
+msgstr ""
+
+#. translators: %s: date and time of the last screening.
+#: includes/class-didit-report.php:281
+#, php-format
+msgid "ongoing monitoring on, last screened %s"
+msgstr ""
+
+#: includes/class-didit-report.php:282
+msgid "ongoing monitoring on"
+msgstr ""
+
+#: includes/class-didit-report.php:283
+msgid "ongoing monitoring off"
+msgstr ""
+
+#: includes/class-didit-report.php:309
+msgid "sanctions"
+msgstr ""
+
+#: includes/class-didit-report.php:310
+msgid "adverse media"
+msgstr ""
+
+#. translators: %s: match score.
+#: includes/class-didit-report.php:311
+#, php-format
+msgid "match %s"
+msgstr ""
+
+#. translators: %s: risk score.
+#: includes/class-didit-report.php:312
+#, php-format
+msgid "risk score %s"
+msgstr ""
+
+#: includes/class-didit-report.php:326
+msgid "Check results appear here once Didit has a decision."
+msgstr ""
+
+#: includes/class-didit-report.php:333
+msgid "Open in Didit Console"
+msgstr ""
+
+#: includes/class-didit-report.php:334
+msgid "(opens in a new tab)"
+msgstr ""
+
+#: includes/class-didit-report.php:343
+msgid "Not started"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:97
+msgid "Show \"Sign in with Didit\" on the WordPress login page"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:98
+msgid "Publishable key (Authentication → Developers)"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:100
+msgid "Application ID"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:102
+msgid "Turn on Authentication for the application in the Didit Console and register this exact redirect URL:"
+msgstr ""
+
+#. translators: %s: sign-in address.
+#: includes/class-didit-sign-in.php:104
+#, php-format
+msgid "Sign-in address: %s"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:108
+msgid "People sign in with the methods the Didit application allows, including passkeys. An account links by its verified email, except accounts that can manage the site: those link from their own profile. New accounts are only created when anyone can register."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:134
+msgid "Linked to a Didit identity."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:134
+msgid "Not linked."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:139
+msgid "Unlink"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:145
+msgid "Link my Didit identity"
+msgstr ""
+
+#: includes/class-didit-sign-in.php:156
+#: includes/class-didit-workflows.php:180
+msgid "You are not allowed to do this."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:166
+msgid "Sign in with Didit is not available right now."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:167
+msgid "The Didit sign-in expired or was already used. Please try again."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:168
+msgid "The Didit sign-in did not complete."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:169
+msgid "Your Didit account has no verified email, so it cannot be matched to an account here."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:170
+msgid "This account can manage the site. Log in with your password and link Didit from your profile."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:171
+msgid "This account is linked to another Didit identity."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:172
+msgid "No account here uses this email, and registration is closed."
+msgstr ""
+
+#: includes/class-didit-sign-in.php:173
+msgid "Please create your account with the registration form first."
+msgstr ""
+
+#: includes/class-didit-workflows.php:36
+msgid "Shortcodes and content gate"
+msgstr ""
+
+#: includes/class-didit-workflows.php:37
+msgid "WooCommerce checkout and after purchase"
+msgstr ""
+
+#: includes/class-didit-workflows.php:38
+msgid "Registration"
+msgstr ""
+
+#: includes/class-didit-workflows.php:39
+msgid "Age-restricted products and categories"
+msgstr ""
+
+#: includes/class-didit-workflows.php:40
+msgid "My Account re-verification"
+msgstr ""
+
+#: includes/class-didit-workflows.php:41
+msgid "Business customers (KYB)"
+msgstr ""
+
+#: includes/class-didit-workflows.php:166
+msgid "Age estimation"
+msgstr ""
+
+#: includes/class-didit-workflows.php:167
+msgid "Questionnaire"
+msgstr ""
+
+#: includes/class-didit-workflows.php:171
+msgid "Company documents"
+msgstr ""
+
+#: includes/class-didit-workflows.php:196
+msgid "This application has no workflows yet. Create one in the Didit Console."
+msgstr ""
+
+#: includes/class-didit-workflows.php:199
+msgid "Workflow"
+msgstr ""
+
+#: includes/class-didit-workflows.php:199
+msgid "Type"
+msgstr ""
+
+#: includes/class-didit-workflows.php:199
+msgid "Checks"
+msgstr ""
+
+#: includes/class-didit-workflows.php:205
+msgid "Default"
+msgstr ""
+
+#: includes/class-didit-workflows.php:206
+msgid "Person (KYC)"
+msgstr ""
+
+#: includes/class-didit-workflows.php:213
+msgid "Refresh list"
+msgstr ""
+
+#: includes/class-didit-workflows.php:242
+#: includes/class-didit-workflows.php:258
+msgid "Default Workflow ID"
+msgstr ""
+
+#: includes/class-didit-workflows.php:265
+msgid "Each placement starts sessions with its own workflow, so one site can ask for an ID check at registration, an age check on restricted products and a business check for trade accounts. An approval only counts for the workflow that produced it. Choose a KYB workflow for business customers."
 msgstr ""
