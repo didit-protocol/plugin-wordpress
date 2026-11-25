@@ -9,6 +9,12 @@
  * which Didit answers only for a live session. Accounts link by Didit subject, or by a
  * verified email for accounts that cannot manage the site. Administrators link from
  * their own profile.
+ *
+ * A link is bound to this site and to the issuer as well as the subject: it is stored
+ * per site (LINK_META_PREFIX + blog ID) as a hash of "issuer|sub", so a subject from
+ * another issuer, or a link made on another site of the network, never matches.
+ * Links stored by 0.4.0 pre-releases under LEGACY_META held only the subject; they no
+ * longer sign anyone in and are removed on unlink.
  */
 
 if (!defined('ABSPATH')) {
@@ -18,7 +24,12 @@ if (!defined('ABSPATH')) {
 final class Didit_Verify_Sign_In
 {
   const COOKIE = 'didit_signin';
-  const META = '_didit_auth_sub';
+  /** Pre-release link holding the bare subject. Ignored for sign-in; removed on unlink. */
+  const LEGACY_META = '_didit_auth_sub';
+  /** Per-site link key: this prefix followed by the blog ID. */
+  const LINK_META_PREFIX = '_didit_auth_link_';
+  /** Alias of LEGACY_META for existing callers (the personal-data eraser). */
+  const META = self::LEGACY_META;
   const FLOW_TTL = 600;
 
   public static function init()
@@ -66,6 +77,25 @@ final class Didit_Verify_Sign_In
   public static function redirect_uri(): string
   {
     return site_url('wp-login.php?action=didit_callback', 'login');
+  }
+
+  /** The user meta key that holds this site's link. */
+  public static function link_meta_key(): string
+  {
+    return self::LINK_META_PREFIX . (int) get_current_blog_id();
+  }
+
+  /** The stored form of a link: binds the subject to the issuer it came from. */
+  public static function link_value(string $sub, string $issuer = ''): string
+  {
+    return hash('sha256', ('' !== $issuer ? $issuer : self::issuer()) . '|' . $sub);
+  }
+
+  /** Users on this site linked to this Didit identity (at most $number IDs). */
+  private static function linked_users(string $sub, int $number): array
+  {
+    $ids = get_users(['meta_key' => self::link_meta_key(), 'meta_value' => self::link_value($sub), 'number' => $number, 'fields' => 'ID']); // phpcs:ignore WordPress.DB.SlowDBQuery -- one lookup per sign-in.
+    return is_array($ids) ? array_map('intval', $ids) : [];
   }
 
   public static function b64url(string $bytes): string
@@ -126,10 +156,10 @@ final class Didit_Verify_Sign_In
 
   public static function render_profile_link($user)
   {
-    if (!self::enabled() && !get_user_meta($user->ID, self::META, true)) {
+    $linked = '' !== (string) get_user_meta($user->ID, self::link_meta_key(), true);
+    if (!self::enabled() && !$linked) {
       return;
     }
-    $linked = '' !== (string) get_user_meta($user->ID, self::META, true);
     echo '<table class="form-table" role="presentation"><tr><th>' . esc_html__('Sign in with Didit', 'didit-verify') . '</th><td>';
     echo '<p>' . esc_html($linked ? __('Linked to a Didit identity.', 'didit-verify') : __('Not linked.', 'didit-verify')) . '</p>';
     if ($linked && current_user_can('edit_user', $user->ID)) {
@@ -155,7 +185,8 @@ final class Didit_Verify_Sign_In
     if (!$user_id || !current_user_can('edit_user', $user_id)) {
       wp_die(esc_html__('You are not allowed to do this.', 'didit-verify'), '', ['response' => 403]);
     }
-    delete_user_meta($user_id, self::META);
+    delete_user_meta($user_id, self::link_meta_key());
+    delete_user_meta($user_id, self::LEGACY_META);
     wp_safe_redirect(get_current_user_id() === $user_id ? admin_url('profile.php') : admin_url('user-edit.php?user_id=' . $user_id));
     exit;
   }
@@ -171,6 +202,7 @@ final class Didit_Verify_Sign_In
       'linked_elsewhere' => __('This account is linked to another Didit identity.', 'didit-verify'),
       'no_account' => __('No account here uses this email, and registration is closed.', 'didit-verify'),
       'register_first' => __('Please create your account with the registration form first.', 'didit-verify'),
+      'not_allowed' => __('This account cannot sign in here.', 'didit-verify'),
     ];
   }
 
@@ -339,12 +371,14 @@ final class Didit_Verify_Sign_In
    */
   public static function resolve_user(string $sub, string $email, bool $email_verified)
   {
-    $linked = get_users(['meta_key' => self::META, 'meta_value' => $sub, 'number' => 2, 'fields' => 'ID']); // phpcs:ignore WordPress.DB.SlowDBQuery -- one lookup per sign-in.
-    if (is_array($linked) && count($linked) > 1) {
+    $key = self::link_meta_key();
+    $link = self::link_value($sub);
+    $linked = self::linked_users($sub, 2);
+    if (count($linked) > 1) {
       return new WP_Error('linked_elsewhere');
     }
-    if (is_array($linked) && 1 === count($linked)) {
-      $user = get_userdata((int) $linked[0]);
+    if (1 === count($linked)) {
+      $user = get_userdata($linked[0]);
       return $user ?: new WP_Error('no_account');
     }
     if (!$email_verified || !is_email($email)) {
@@ -355,11 +389,15 @@ final class Didit_Verify_Sign_In
       if (self::can_manage_site($user)) {
         return new WP_Error('link_from_profile');
       }
-      $existing = (string) get_user_meta($user->ID, self::META, true);
-      if ('' !== $existing && $existing !== $sub) {
+      // Email lookup is network-wide: only link an account that belongs to this site.
+      if (is_multisite() && !is_user_member_of_blog($user->ID, get_current_blog_id())) {
+        return new WP_Error('not_allowed');
+      }
+      $existing = (string) get_user_meta($user->ID, $key, true);
+      if ('' !== $existing && !hash_equals($existing, $link)) {
         return new WP_Error('linked_elsewhere');
       }
-      update_user_meta($user->ID, self::META, $sub);
+      update_user_meta($user->ID, $key, $link);
       return $user;
     }
     if (!get_option('users_can_register', false)) {
@@ -383,8 +421,57 @@ final class Didit_Verify_Sign_In
     if (is_wp_error($user_id)) {
       return new WP_Error('no_account');
     }
-    update_user_meta($user_id, self::META, $sub);
+    update_user_meta($user_id, $key, $link);
     return get_userdata($user_id);
+  }
+
+  /**
+   * WordPress's account restrictions for a user about to be signed in.
+   *
+   * There is no password here, so the `authenticate` filter is not run: it would invoke
+   * the password handlers. Instead apply what wp_authenticate() enforces around them:
+   * the multisite spam check, membership of this site (super admins excepted), and
+   * `wp_authenticate_user`, the filter plugins use to deny a login (approval, bans,
+   * lockouts). It is passed an empty password; a WP_Error from any step rejects.
+   *
+   * @return WP_User|WP_Error
+   */
+  public static function check_login_allowed($user)
+  {
+    if (!is_object($user) || empty($user->ID)) {
+      return new WP_Error('not_allowed');
+    }
+    if (is_multisite()) {
+      $user = wp_authenticate_spam_check($user);
+      if (is_wp_error($user)) {
+        return new WP_Error('not_allowed');
+      }
+      if (!is_super_admin($user->ID) && !is_user_member_of_blog($user->ID, get_current_blog_id())) {
+        return new WP_Error('not_allowed');
+      }
+    }
+    $filtered = apply_filters('wp_authenticate_user', $user, ''); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook, applied as wp_authenticate_username_password() does.
+    if (!is_object($filtered) || is_wp_error($filtered) || (int) $filtered->ID !== (int) $user->ID) {
+      return new WP_Error('not_allowed');
+    }
+    return $user;
+  }
+
+  /**
+   * Sign a resolved user in, only if WordPress's account restrictions allow it.
+   *
+   * @return WP_User|WP_Error
+   */
+  public static function log_in($user)
+  {
+    $allowed = self::check_login_allowed($user);
+    if (is_wp_error($allowed)) {
+      return $allowed;
+    }
+    wp_set_current_user($user->ID);
+    wp_set_auth_cookie($user->ID, false, is_ssl());
+    do_action('wp_login', $user->user_login, $user); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook, fired like wp_signon().
+    return $user;
   }
 
   public static function callback()
@@ -403,21 +490,21 @@ final class Didit_Verify_Sign_In
     $flow = $person['flow'];
     if (!empty($flow['link_user'])) {
       $user_id = (int) $flow['link_user'];
-      $others = get_users(['meta_key' => self::META, 'meta_value' => $person['sub'], 'number' => 1, 'fields' => 'ID']); // phpcs:ignore WordPress.DB.SlowDBQuery -- one lookup per link.
-      if (get_current_user_id() !== $user_id || ($others && (int) $others[0] !== $user_id)) {
+      $others = array_diff(self::linked_users($person['sub'], 2), [$user_id]);
+      if (get_current_user_id() !== $user_id || $others) {
         self::fail('linked_elsewhere');
       }
-      update_user_meta($user_id, self::META, $person['sub']);
+      update_user_meta($user_id, self::link_meta_key(), self::link_value($person['sub']));
       wp_safe_redirect(admin_url('profile.php'));
       exit;
     }
     $user = self::resolve_user($person['sub'], $person['email'], $person['email_verified']);
+    if (!is_wp_error($user)) {
+      $user = self::log_in($user);
+    }
     if (is_wp_error($user)) {
       self::fail($user->get_error_code());
     }
-    wp_set_current_user($user->ID);
-    wp_set_auth_cookie($user->ID, false, is_ssl());
-    do_action('wp_login', $user->user_login, $user); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook, fired like wp_signon().
     $default = admin_url('profile.php');
     $redirect = apply_filters('login_redirect', $flow['redirect_to'] ?: $default, $flow['redirect_to'], $user); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook.
     wp_safe_redirect(wp_validate_redirect($redirect, $default));

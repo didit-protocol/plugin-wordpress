@@ -23,7 +23,7 @@ function is_email($email) { return (bool) filter_var($email, FILTER_VALIDATE_EMA
 function sanitize_key($key) { return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $key)); }
 function sanitize_user($user) { return preg_replace('/[^A-Za-z0-9_.\-@]/', '', (string) $user); }
 function delete_transient($key) { unset($GLOBALS['didit_test_transients'][$key]); }
-function delete_option($key) { unset($GLOBALS['didit_test_options'][$key]); }
+if (!function_exists('delete_option')) { function delete_option($key) { unset($GLOBALS['didit_test_options'][$key]); } }
 function wp_verify_nonce($nonce, $action) { return 'test-nonce-' . $action === $nonce; }
 function get_post_meta($id, $key, $single = true) { return $GLOBALS['didit_test_post_meta'][$id][$key] ?? ''; }
 function wp_get_post_parent_id($id) { return 0; }
@@ -97,4 +97,75 @@ function check($condition, $label) {
   if (!$condition) { fwrite(STDERR, "FAIL $label\n"); exit(1); }
   $GLOBALS['didit_test_passed']++;
   echo "PASS $label\n";
+}
+
+// Sign-in: multisite, account restrictions and the login cookie.
+$GLOBALS['didit_test_multisite'] = false;
+$GLOBALS['didit_test_blog_id'] = 1;
+$GLOBALS['didit_test_blog_members'] = null; // null: everyone is a member; else [blog_id => [user IDs]].
+$GLOBALS['didit_test_spam_users'] = [];
+$GLOBALS['didit_test_auth_cookies'] = [];
+if (!function_exists('is_multisite')) { function is_multisite() { return (bool) $GLOBALS['didit_test_multisite']; } }
+if (!function_exists('get_current_blog_id')) { function get_current_blog_id() { return (int) $GLOBALS['didit_test_blog_id']; } }
+if (!function_exists('is_user_member_of_blog')) {
+  function is_user_member_of_blog($user_id = 0, $blog_id = 0) {
+    $members = $GLOBALS['didit_test_blog_members'];
+    return null === $members || in_array((int) $user_id, $members[(int) $blog_id] ?? [], true);
+  }
+}
+if (!function_exists('wp_authenticate_spam_check')) {
+  function wp_authenticate_spam_check($user) {
+    return in_array((int) $user->ID, $GLOBALS['didit_test_spam_users'], true) ? new WP_Error('spammer_account') : $user;
+  }
+}
+if (!function_exists('wp_set_current_user')) { function wp_set_current_user($id) { $GLOBALS['didit_test_current_user'] = (int) $id; } }
+if (!function_exists('wp_set_auth_cookie')) { function wp_set_auth_cookie($id, $remember = false, $secure = '') { $GLOBALS['didit_test_auth_cookies'][] = (int) $id; } }
+if (!function_exists('is_ssl')) { function is_ssl() { return true; } }
+
+// Order notes, option locks and uninstall clean-up (direct checks).
+$GLOBALS['didit_test_comment_meta'] = [];
+$GLOBALS['didit_test_deleted_comments'] = [];
+$GLOBALS['didit_test_unscheduled'] = [];
+$GLOBALS['didit_test_comments_query'] = null;
+if (!function_exists('add_option')) {
+  function add_option($key, $value = '', $deprecated = '', $autoload = 'yes') {
+    if (array_key_exists($key, $GLOBALS['didit_test_options'])) { return false; }
+    $GLOBALS['didit_test_options'][$key] = $value;
+    return true;
+  }
+}
+if (!function_exists('add_comment_meta')) {
+  function add_comment_meta($id, $key, $value, $unique = false) { $GLOBALS['didit_test_comment_meta'][$id][$key] = $value; return true; }
+}
+if (!function_exists('get_comments')) {
+  function get_comments($args) {
+    $GLOBALS['didit_test_comments_query'] = $args;
+    $ids = [];
+    foreach ($GLOBALS['didit_test_comment_meta'] as $id => $meta) {
+      if (isset($meta[$args['meta_key'] ?? '']) && ($GLOBALS['didit_test_comment_post'][$id] ?? 0) === (int) ($args['post_id'] ?? 0)) { $ids[] = $id; }
+    }
+    return $ids;
+  }
+}
+if (!function_exists('remove_filter')) {
+  function remove_filter($hook, $callback, $priority = 10) { return false; }
+}
+if (!function_exists('wp_delete_comment')) {
+  function wp_delete_comment($id, $force = false) {
+    $GLOBALS['didit_test_deleted_comments'][] = (int) $id;
+    unset($GLOBALS['didit_test_comment_meta'][$id]);
+    return true;
+  }
+}
+if (!function_exists('wp_unschedule_hook')) {
+  function wp_unschedule_hook($hook) { $GLOBALS['didit_test_unscheduled'][] = ['wp', $hook]; return 0; }
+}
+if (!function_exists('wp_clear_scheduled_hook')) {
+  function wp_clear_scheduled_hook($hook, $args = []) { $GLOBALS['didit_test_unscheduled'][] = ['clear', $hook, $args]; return 0; }
+}
+if (!function_exists('as_unschedule_all_actions')) {
+  function as_unschedule_all_actions($hook, $args = [], $group = '') { $GLOBALS['didit_test_unscheduled'][] = ['as', $hook]; }
+}
+if (!function_exists('delete_metadata')) {
+  function delete_metadata($type, $id, $key, $value = '', $all = false) { $GLOBALS['didit_test_deleted_metadata'][] = [$type, $key]; return true; }
 }

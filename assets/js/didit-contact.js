@@ -8,6 +8,7 @@
   function call(step, body) {
     body.order_id = cfg.orderId;
     body.order_key = cfg.orderKey;
+    body.access = cfg.access;
     return fetch(cfg.restUrl + step, {
       method: "POST",
       credentials: "same-origin",

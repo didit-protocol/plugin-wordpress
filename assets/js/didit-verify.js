@@ -118,7 +118,14 @@
         btn.classList.add('didit-verified');
         btn.disabled = true;
         pendingResult = null;
-        setCheckoutSession(data.sessionId);
+        if (btn.dataset.placement === 'registration') {
+          // Registration has its own field, so it never replaces the checkout session.
+          var wrap = btn.closest('.didit-registration');
+          var field = wrap && wrap.querySelector('input[name="didit_registration_session_id"]');
+          if (field) field.value = data.sessionId;
+        } else {
+          setCheckoutSession(data.sessionId);
+        }
         feedback(btn, i18n.approved || 'Identity verified. You can continue.', false);
         // Gated pages show what the approval unlocked.
         if (["product_gate", "my_account", "business"].indexOf(btn.dataset.placement || "") !== -1) {

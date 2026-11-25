@@ -31,7 +31,11 @@ $GLOBALS['didit_remote_status'] = [];
 $GLOBALS['didit_test_api_response'] = function ($url) {
   preg_match('#/session/([^/]+)/decision/#', $url, $m);
   $id = rawurldecode($m[1] ?? '');
-  return ['response' => ['code' => 200], 'body' => json_encode(['session_id' => $id, 'status' => $GLOBALS['didit_remote_status'][$id] ?? 'Not Started'])];
+  $decision = ['session_id' => $id, 'status' => $GLOBALS['didit_remote_status'][$id] ?? 'Not Started'];
+  if (isset($GLOBALS['didit_remote_kind'][$id])) {
+    $decision['session_kind'] = $GLOBALS['didit_remote_kind'][$id];
+  }
+  return ['response' => ['code' => 200], 'body' => json_encode($decision)];
 };
 function start(array $input) {
   $GLOBALS['didit_test_transients'] = [];
@@ -139,5 +143,106 @@ $_COOKIE['didit_verification_owner'] = str_repeat('e', 64);
 $errors->codes = [];
 Didit_Verify_Placements::registration_errors($errors);
 check(['didit_verification_required'] === $errors->codes, 'another browser cannot reuse the session to register');
+
+// Checkout account creation: the shopper verifies for registration on the checkout page,
+// which posts the checkout session in didit_session_id. The browser's own registration
+// session still satisfies the registration check.
+$_COOKIE['didit_verification_owner'] = str_repeat('f', 64);
+$reg2 = start(['placement' => 'registration']);
+$GLOBALS['didit_remote_status'][$reg2['sessionId']] = 'Approved';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $reg2['sessionId']])));
+$checkout2 = start(['placement' => 'checkout']);
+$_POST = ['didit_session_id' => $checkout2['sessionId']];
+$errors->codes = [];
+Didit_Verify_Placements::registration_errors($errors);
+check([] === $errors->codes, 'an account created at checkout accepts this browser\'s registration check');
+$_POST = [];
+Didit_Verify_Placements::bind_registration_session(79);
+check($plugin->user_has_workflow_approval(79, 'wf-id'), 'the account created at checkout receives the registration approval');
+
+// Guests confirm a session by its stored placement; the request no longer names one.
+$opts['didit_require_login'] = true;
+$_COOKIE['didit_verification_owner'] = str_repeat('1', 64);
+$reg3 = start(['placement' => 'registration']);
+$verify = function ($session_id) use ($plugin) {
+  return $plugin->rest_check_verify_permission(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $session_id]), ['X-WP-Nonce' => 'test-nonce-wp_rest']));
+};
+check(true === $verify($reg3['sessionId']), 'a guest can confirm the registration session this browser started');
+$_COOKIE['didit_verification_owner'] = str_repeat('2', 64);
+check(is_wp_error($verify($reg3['sessionId'])), 'another browser cannot confirm it');
+$_COOKIE['didit_verification_owner'] = str_repeat('1', 64);
+$opts['didit_require_login'] = false;
+$plain = start(['placement' => 'default']);
+$opts['didit_require_login'] = true;
+check(is_wp_error($verify($plain['sessionId'])), 'a guest cannot confirm a session of a placement that requires login');
+
+// A resumed session must belong to the requested placement, not only to its workflow.
+$GLOBALS['didit_test_current_user'] = 42;
+$_COOKIE['didit_verification_owner'] = str_repeat('3', 64);
+$opts['didit_my_account_enabled'] = true;
+$plain42 = start(['placement' => 'default']);
+$account = start(['placement' => 'my_account']);
+check($plain42['sessionId'] !== $account['sessionId'], 'a session of another placement with the same workflow is not reopened');
+check($account['sessionId'] === start(['placement' => 'my_account'])['sessionId'], 'the placement\'s own open session is reopened');
+
+// My Account: a session that needs the customer's input can be continued.
+$record = $plugin->stored_session($account['sessionId']);
+$plugin->apply_confirmed_status($account['sessionId'], $record, 'Resubmitted', time() + 20);
+ob_start();
+Didit_Verify_Placements::account_tab();
+$html = ob_get_clean();
+check(false !== strpos($html, 'Your action is needed') && false !== strpos($html, 'Continue verification'),
+  'a resubmission request offers to continue the verification');
+
+// Content gate and status read only their own workflow.
+if (!function_exists('do_shortcode')) { function do_shortcode($content) { return $content; } }
+$GLOBALS['didit_test_user_meta']['42|_didit_approved_workflows'] = '';
+$GLOBALS['didit_test_user_meta']['42|_didit_workflow_sessions'] = '';
+$_COOKIE['didit_verification_owner'] = str_repeat('4', 64);
+$age42 = start(['placement' => 'product_gate']);
+$GLOBALS['didit_remote_status'][$age42['sessionId']] = 'Approved';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $age42['sessionId']])));
+check($plugin->user_has_workflow_approval(42, 'wf-age'), 'the age approval is recorded');
+check(false === strpos($plugin->render_gate_shortcode([], 'SECRET'), 'SECRET'), 'an age approval does not unlock content gated by the identity workflow');
+check(false === strpos($plugin->render_status_shortcode([]), 'Identity Verified'), 'an age approval is not shown as identity verified');
+$id42 = start(['placement' => 'default']);
+$GLOBALS['didit_remote_status'][$id42['sessionId']] = 'Approved';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $id42['sessionId']])));
+check(false !== strpos($plugin->render_gate_shortcode([], 'SECRET'), 'SECRET'), 'an approval of the gate\'s workflow unlocks it');
+check(false !== strpos($plugin->render_status_shortcode([]), 'Identity Verified'), 'the status shortcode shows the gate\'s workflow');
+
+// The kind of subject must match the placement, whatever workflow was picked.
+$GLOBALS['didit_test_current_user'] = 0;
+$opts['didit_require_login'] = false;
+$_COOKIE['didit_verification_owner'] = str_repeat('5', 64);
+$company = start(['placement' => 'checkout']);
+$GLOBALS['didit_remote_status'][$company['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$company['sessionId']] = 'business';
+check(!didit_test_internal('checkout_session_is_approved', $company['sessionId']), 'a company decision cannot pass the personal checkout check');
+$GLOBALS['didit_test_current_user'] = 42;
+$_COOKIE['didit_verification_owner'] = str_repeat('6', 64);
+$GLOBALS['didit_test_user_meta']['42|_didit_kyb_status'] = '';
+$person = start(['placement' => 'business']);
+$GLOBALS['didit_remote_status'][$person['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$person['sessionId']] = 'user';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $person['sessionId']])));
+check('Approved' !== get_user_meta(42, '_didit_kyb_status'), 'a personal decision does not mark the company verified');
+$GLOBALS['didit_test_transients'][Didit_Verify_Workflows::CACHE_KEY] = [['id' => 'wf-kyb', 'type' => 'kyb'], ['id' => 'wf-id', 'type' => 'kyc']];
+check(['business' => 'wf-kyb', 'registration' => 'wf-id'] == Didit_Verify_Workflows::sanitize_map(['business' => 'wf-kyb', 'registration' => 'wf-id', 'checkout' => 'wf-kyb'])
+  && [] === Didit_Verify_Workflows::sanitize_map(['business' => 'wf-id']), 'a workflow of the wrong type is not saved for a placement');
+
+// WooCommerce's own registration settings open the registration placement to guests.
+$opts['users_can_register'] = false;
+check(!Didit_Verify_Placements::guest_may_start(['placement' => 'registration']), 'without any open registration, guests cannot start it');
+if (!class_exists('WooCommerce')) { class WooCommerce {} }
+$opts['woocommerce_enable_myaccount_registration'] = 'yes';
+check(Didit_Verify_Placements::guest_may_start(['placement' => 'registration']), 'WooCommerce My Account registration opens the registration check');
+$opts['woocommerce_enable_myaccount_registration'] = 'no';
+$opts['woocommerce_enable_signup_and_login_from_checkout'] = 'yes';
+check(Didit_Verify_Placements::guest_may_start(['placement' => 'registration']), 'checkout account creation opens the registration check');
+check(!Didit_Verify_Placements::guest_may_start(['placement' => 'my_account']), 'other placements stay closed to guests');
+
+$source = file_get_contents(__DIR__ . '/../includes/class-didit-placements.php');
+check(false !== strpos($source, "'add_option_' . \$option"), 'the first save of the account tab switches also refreshes the endpoints');
 
 echo $GLOBALS['didit_test_passed'] . " passed\n";

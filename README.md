@@ -52,7 +52,7 @@ This plugin connects to the [Didit](https://didit.me) identity verification serv
 - Terms of Use: [https://didit.me/en/terms/identity-verification/](https://didit.me/en/terms/identity-verification/)
 - Privacy Policy: [https://didit.me/en/terms/privacy-policy/](https://didit.me/en/terms/privacy-policy/)
 
-No data is sent until the administrator configures credentials and a user initiates verification.
+No data is sent until the administrator configures credentials. Identity verification starts only when a user starts it. Phone and email codes are sent only when the customer asks for one on the order page. If the administrator turns on automatic AML screening, placing an order at or above the set threshold sends the billing name and an order or customer reference to Didit in the background, without any action from the shopper.
 
 ## Quick Start
 

@@ -59,6 +59,46 @@ $kyb = Didit_Verify_Report::summarize([
 check('business' === $kyb['kind'] && 'Acme SL' === $kyb['checks'][0]['company'] && 'key_people' === $kyb['checks'][1]['type'],
   'business sessions show the registry and key people results');
 
+// Questionnaires and business documents keep only statuses, types and the questionnaire title.
+$extra = Didit_Verify_Report::summarize([
+  'session_id' => $id, 'session_kind' => 'business', 'status' => 'In Review',
+  'questionnaire_responses' => [[
+    'node_id' => 'q1', 'questionnaire_id' => 'qq', 'title' => 'Source of funds', 'status' => 'Approved',
+    'sections' => [['title' => 'S', 'items' => [
+      ['uuid' => 'u1', 'element_type' => 'LONG_TEXT', 'title' => 'Where does the money come from?', 'answer' => ['value' => 'secret-answer-text']],
+      ['uuid' => 'u2', 'element_type' => 'FILE_UPLOAD', 'answer' => ['files' => ['/media/ocr/secret-upload.pdf']]],
+    ]]],
+  ]],
+  'document_verifications' => [[
+    'node_id' => 'd1', 'status' => 'In Review', 'required_groups' => ['legal_presence', 'ownership'],
+    'groups' => ['legal_presence' => ['approved' => 1, 'pending' => 0, 'missing' => 0], 'ownership' => ['approved' => 0, 'pending' => 0, 'missing' => 1]],
+    'items' => [['uuid' => 'x', 'document_type' => 'certificate_of_incorporation', 'status' => 'Approved',
+      'file_url' => 'https://images.example/cert.pdf', 'ocr_data' => ['company' => 'secret-ocr-text']]],
+  ]],
+  'document_ai_documents' => [['status' => 'Declined', 'items' => [['original_filename' => 'secret-file.pdf', 'file_url' => 'https://images.example/a.pdf', 'extracted_data' => ['x' => 'secret-extract']]]]],
+]);
+check(['documents', 'document_ai', 'questionnaire'] === array_column($extra['checks'], 'type'),
+  'questionnaires, business documents and additional documents are summarized');
+$byType = array_column($extra['checks'], null, 'type');
+check('Approved' === $byType['questionnaire']['status'] && 'Source of funds' === $byType['questionnaire']['value'], 'a questionnaire keeps its status and title');
+check('In Review' === $byType['documents']['status'] && in_array('certificate of incorporation: Approved', $byType['documents']['flags'], true)
+  && in_array('missing ownership', $byType['documents']['flags'], true), 'business documents keep each type and status and the missing groups');
+check('Declined' === $byType['document_ai']['status'], 'additional documents keep their status');
+$stored = json_encode($extra);
+foreach (['secret-answer-text', 'secret-upload', 'Where does the money', 'images.example', 'secret-ocr-text', 'secret-file', 'secret-extract'] as $forbidden) {
+  check(false === strpos($stored, $forbidden), "questionnaire and document summaries never store \"$forbidden\"");
+}
+$extraHtml = Didit_Verify_Report::render($extra, $id);
+check(false !== strpos($extraHtml, 'Questionnaire') && false !== strpos($extraHtml, 'Business documents') && false !== strpos($extraHtml, 'Additional documents'),
+  'the new checks have readable labels');
+
+// More results of one kind than are kept: the number left out is recorded and shown.
+$many = Didit_Verify_Report::summarize(['session_id' => $id, 'status' => 'Approved',
+  'face_matches' => array_fill(0, 5, ['status' => 'Approved', 'score' => 90])]);
+check(3 === count($many['checks']) && ['face_match' => 2] === $many['truncated'], 'results beyond the cap are counted, not silently dropped');
+check(false !== strpos(Didit_Verify_Report::render($many, $id), '2 more results not shown'), 'the admin view says results were left out');
+check(!isset($summary['truncated']), 'nothing is marked as left out when every result fits');
+
 $html = Didit_Verify_Report::render($summary, $id);
 check(false === strpos($html, '<b>Doe</b>') && false !== strpos($html, 'Jane Doe'), 'markup in hit names is removed when stored');
 $hostile = Didit_Verify_Report::render(['checks' => [['type' => 'aml', 'status' => '"><script>', 'hits_total' => 1, 'hits' => [['name' => '<img src=x onerror=1>']]]]]);
@@ -103,7 +143,14 @@ $response = deliver('data.updated', 'Approved', $now);
 check(!is_wp_error($response) && 1 === count($GLOBALS['didit_test_api_calls']), 'data.updated reads the decision from Didit');
 check(3 === get_user_meta(42, '_didit_report')['checks'][3]['hits_total'], 'a later monitoring update reaches the user summary');
 
+$completed = array_filter($GLOBALS['didit_test_actions'] ?? [], function ($a) { return 'didit_verification_completed' === $a[0]; });
+$before = count($completed);
+deliver('data.updated', 'Approved', $now + 1);
+$completed = array_filter($GLOBALS['didit_test_actions'] ?? [], function ($a) { return 'didit_verification_completed' === $a[0]; });
+check($before === count($completed), 'a monitoring refresh of an approved session does not fire the completion hook again');
+
 $GLOBALS['didit_test_actions'] = [];
+$GLOBALS['decision']['status'] = 'Declined';
 deliver('status.updated', 'Declined', $now + 1);
 $completed = array_filter($GLOBALS['didit_test_actions'], function ($a) { return 'didit_verification_completed' === $a[0]; });
 check(1 === count($completed), 'a decision fires the completion hook');

@@ -22,8 +22,11 @@ final class Didit_Verify_Placements
     add_action('register_form', [__CLASS__, 'registration_box']);
     add_filter('registration_errors', [__CLASS__, 'registration_errors'], 10, 3);
     add_action('user_register', [__CLASS__, 'bind_registration_session'], 10, 1);
-    add_action('update_option_didit_my_account_enabled', [__CLASS__, 'flush_endpoints']);
-    add_action('update_option_didit_business_enabled', [__CLASS__, 'flush_endpoints']);
+    // The first save adds the option instead of updating it, which fires add_option_*.
+    foreach (['didit_my_account_enabled', 'didit_business_enabled'] as $option) {
+      add_action('add_option_' . $option, [__CLASS__, 'flush_endpoints']);
+      add_action('update_option_' . $option, [__CLASS__, 'flush_endpoints']);
+    }
 
     add_action('woocommerce_loaded', [__CLASS__, 'wc_hooks']);
   }
@@ -31,7 +34,10 @@ final class Didit_Verify_Placements
   public static function wc_hooks()
   {
     add_action('woocommerce_register_form', [__CLASS__, 'registration_box']);
+    // wc_create_new_customer() also applies this filter to accounts created at checkout.
     add_filter('woocommerce_registration_errors', [__CLASS__, 'registration_errors'], 10, 3);
+    add_action('woocommerce_after_checkout_registration_form', [__CLASS__, 'checkout_registration_box']);
+    add_filter('render_block_woocommerce/checkout', [__CLASS__, 'block_checkout_registration_box'], 10, 1);
 
     add_action('woocommerce_product_options_advanced', [__CLASS__, 'product_field']);
     add_action('woocommerce_admin_process_product_object', [__CLASS__, 'product_save']);
@@ -51,7 +57,7 @@ final class Didit_Verify_Placements
   {
     $placement = is_array($input) && isset($input['placement']) && is_string($input['placement']) ? $input['placement'] : '';
     if ('registration' === $placement) {
-      return Didit_Verify_Workflows::is_enabled('registration') && (bool) get_option('users_can_register', false);
+      return Didit_Verify_Workflows::is_enabled('registration') && self::site_allows_registration();
     }
     if ('product_gate' === $placement) {
       return Didit_Verify_Workflows::is_enabled('product_gate');
@@ -59,23 +65,85 @@ final class Didit_Verify_Placements
     return false;
   }
 
+  /**
+   * Whether visitors can create an account anywhere on the site: WordPress's own
+   * "Anyone can register", or WooCommerce's independent My Account and checkout
+   * account-creation settings.
+   */
+  public static function site_allows_registration(): bool
+  {
+    if (get_option('users_can_register', false)) {
+      return true;
+    }
+    if (!class_exists('WooCommerce')) {
+      return false;
+    }
+    return 'yes' === get_option('woocommerce_enable_myaccount_registration', 'no')
+      || self::checkout_allows_registration();
+  }
+
+  private static function checkout_allows_registration(): bool
+  {
+    return 'yes' === get_option('woocommerce_enable_signup_and_login_from_checkout', 'no')
+      || 'yes' === get_option('woocommerce_enable_delayed_account_creation', 'no');
+  }
+
   /* ── Registration ── */
+
+  private static function registration_markup(): string
+  {
+    return sprintf(
+      '<div class="didit-registration">%s<input type="hidden" name="didit_registration_session_id" value="" /></div>',
+      self::$plugin->render_shortcode(['placement' => 'registration', 'text' => __('Verify your identity to create an account', 'didit-verify')])
+    );
+  }
 
   public static function registration_box()
   {
     if (!Didit_Verify_Workflows::is_enabled('registration') || is_user_logged_in()) {
       return;
     }
-    printf(
-      '<div class="didit-registration">%s<input type="hidden" name="didit_session_id" id="didit_session_id" value="" /></div>',
-      self::$plugin->render_shortcode(['placement' => 'registration']) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
-    );
+    echo self::registration_markup(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
   }
 
+  /** Creating an account at checkout asks for the same registration check. */
+  public static function checkout_registration_box()
+  {
+    if (!Didit_Verify_Workflows::is_enabled('registration') || is_user_logged_in() || !self::checkout_allows_registration()) {
+      return;
+    }
+    printf('<p class="didit-registration-note">%s</p>', esc_html__('Creating an account needs an identity check.', 'didit-verify'));
+    self::registration_box();
+  }
+
+  public static function block_checkout_registration_box($content)
+  {
+    if (!Didit_Verify_Workflows::is_enabled('registration') || is_user_logged_in() || !self::checkout_allows_registration()) {
+      return $content;
+    }
+    return sprintf(
+      '<div class="didit-checkout-registration"><p class="didit-registration-note">%s</p>%s</div>',
+      esc_html__('Creating an account at checkout needs an identity check. Verify here first if you create one.', 'didit-verify'),
+      self::registration_markup()
+    ) . $content;
+  }
+
+  /**
+   * The registration session for this request: the one the form posted, else the one
+   * this browser started last (block checkout posts no form fields). Either way it only
+   * counts if it is bound to this browser and was started for registration.
+   */
   private static function posted_session(): string
   {
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the value is checked against the session bound to this browser.
-    return isset($_POST['didit_session_id']) ? sanitize_text_field(wp_unslash($_POST['didit_session_id'])) : '';
+    // phpcs:disable WordPress.Security.NonceVerification.Missing -- the value is checked against the session bound to this browser.
+    foreach (['didit_registration_session_id', 'didit_session_id'] as $field) {
+      $posted = isset($_POST[$field]) ? sanitize_text_field(wp_unslash($_POST[$field])) : '';
+      if ('' !== $posted && self::registration_session_is_approved($posted, false)) {
+        return $posted;
+      }
+    }
+    // phpcs:enable
+    return self::$plugin->visitor_registration_session();
   }
 
   /** The registration session this browser verified, if Didit approved it for the registration workflow. */
@@ -279,9 +347,10 @@ final class Didit_Verify_Placements
       case 'Declined':
         return __('Declined', 'didit-verify');
       case 'In Review':
+        return __('Being reviewed', 'didit-verify');
       case 'Awaiting User':
       case 'Resubmitted':
-        return __('Being reviewed', 'didit-verify');
+        return __('Your action is needed', 'didit-verify');
       case 'Expired':
       case 'KYC Expired':
       case 'Abandoned':
@@ -294,6 +363,19 @@ final class Didit_Verify_Placements
     }
   }
 
+  /**
+   * The button label for a status. Awaiting User and Resubmitted need the customer to
+   * redo requested steps: the button reopens the same session, which the server hands
+   * back because it is still open for this placement.
+   */
+  private static function action_text(string $status, string $start): string
+  {
+    if (in_array($status, ['Awaiting User', 'Resubmitted', 'Not Started', 'In Progress'], true)) {
+      return __('Continue verification', 'didit-verify');
+    }
+    return 'Approved' === $status ? __('Verify again', 'didit-verify') : $start;
+  }
+
   public static function account_tab()
   {
     $user_id = get_current_user_id();
@@ -303,11 +385,11 @@ final class Didit_Verify_Placements
     $plugin = self::$plugin;
     echo '<div class="didit-account">';
     if (Didit_Verify_Workflows::is_enabled('my_account')) {
-      $status = $plugin->confirmed_user_status($user_id);
+      // The status of the workflow this tab runs, not of an age or checkout check.
+      $status = $plugin->user_workflow_status($user_id, Didit_Verify_Workflows::workflow_for('my_account'));
       printf('<h3>%s</h3><p>%s <strong>%s</strong></p>', esc_html__('Identity', 'didit-verify'), esc_html__('Status:', 'didit-verify'), esc_html(self::customer_status_text($status)));
-      if (!in_array($status, ['In Review', 'Awaiting User', 'Resubmitted'], true)) {
-        $text = 'Approved' === $status ? __('Verify again', 'didit-verify') : __('Verify your Identity', 'didit-verify');
-        echo $plugin->render_shortcode(['placement' => 'my_account', 'text' => $text]); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
+      if ('In Review' !== $status) {
+        echo $plugin->render_shortcode(['placement' => 'my_account', 'text' => self::action_text($status, __('Verify your Identity', 'didit-verify'))]); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
       }
     }
     if (Didit_Verify_Workflows::is_enabled('business')) {
@@ -319,8 +401,8 @@ final class Didit_Verify_Placements
         esc_html__('Status:', 'didit-verify'),
         esc_html(self::customer_status_text($status))
       );
-      if (!in_array($status, ['Approved', 'In Review', 'Awaiting User', 'Resubmitted'], true)) {
-        echo $plugin->render_shortcode(['placement' => 'business', 'text' => __('Verify your business', 'didit-verify')]); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
+      if (!in_array($status, ['Approved', 'In Review'], true)) {
+        echo $plugin->render_shortcode(['placement' => 'business', 'text' => self::action_text($status, __('Verify your business', 'didit-verify'))]); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
       }
     }
     echo '</div>';

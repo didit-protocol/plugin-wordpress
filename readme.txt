@@ -68,7 +68,7 @@ This plugin bundles the [Didit Web SDK](https://www.npmjs.com/package/@didit-pro
 
 The SDK can be rebuilt from source with `npm install && npm run build` (uses Rollup). See the GitHub repository for full build instructions.
 
-No data is sent to Didit until the site administrator configures the plugin and a user initiates verification.
+No data is sent to Didit until the site administrator configures the plugin. Identity verification starts only when a user starts it. Phone and email codes are sent only when the customer asks for one on the order page. If the administrator turns on automatic AML screening, placing an order at or above the set threshold sends the billing name and an order or customer reference to Didit in the background, without any action from the shopper.
 
 == Installation ==
 
