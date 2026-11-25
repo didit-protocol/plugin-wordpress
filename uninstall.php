@@ -69,12 +69,19 @@ if ( function_exists( 'as_unschedule_all_actions' ) ) {
 	as_unschedule_all_actions( 'didit_wc_verification_reminder' );
 	as_unschedule_all_actions( 'didit_aml_screen_order' );
 }
-wp_clear_scheduled_hook( 'didit_aml_screen_order' );
+// WP-Cron fallbacks are scheduled with the order ID as argument; clear them hook-wide.
+foreach ( [ 'didit_aml_screen_order', 'didit_wc_verification_reminder' ] as $didit_cron_hook ) {
+	if ( function_exists( 'wp_unschedule_hook' ) ) {
+		wp_unschedule_hook( $didit_cron_hook );
+	} else {
+		wp_clear_scheduled_hook( $didit_cron_hook );
+	}
+}
 
 // Remove the session bindings and resume pointers created by this plugin, including object-cache entries.
 // phpcs:disable WordPress.DB.DirectDatabaseQuery -- one-time cleanup on uninstall.
 global $wpdb;
-foreach ( [ 'didit_bound_', 'didit_resume_', 'didit_approved_' ] as $didit_prefix ) {
+foreach ( [ 'didit_bound_', 'didit_resume_', 'didit_approved_', 'didit_registration_', 'didit_contact_lock', '_transient_didit_contact_', '_transient_timeout_didit_contact_' ] as $didit_prefix ) {
 	$didit_binding_keys = $wpdb->get_col( $wpdb->prepare(
 		"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
 		$wpdb->esc_like( $didit_prefix ) . '%'
@@ -98,9 +105,25 @@ $didit_user_meta_keys = [
 	'_didit_kyb_verified_at',
 	'_didit_kyb_report',
 	'_didit_auth_sub',
+	'_didit_workflow_sessions',
 ];
+// Sign-in links are stored per site and issuer under keys starting with _didit_auth_link_.
+$didit_user_meta_keys = array_merge( $didit_user_meta_keys, (array) $wpdb->get_col( $wpdb->prepare(
+	"SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE meta_key LIKE %s",
+	$wpdb->esc_like( '_didit_auth_link_' ) . '%'
+) ) );
 foreach ( $didit_user_meta_keys as $didit_meta_key ) {
 	delete_metadata( 'user', 0, $didit_meta_key, '', true );
+}
+
+// Order notes the plugin marked as carrying a Didit result. Merchant notes are not marked and stay.
+$didit_note_ids = $wpdb->get_col( $wpdb->prepare(
+	"SELECT c.comment_ID FROM {$wpdb->comments} c INNER JOIN {$wpdb->commentmeta} m ON m.comment_id = c.comment_ID WHERE c.comment_type = %s AND m.meta_key = %s",
+	'order_note',
+	'_didit_result_note'
+) );
+foreach ( $didit_note_ids as $didit_note_id ) {
+	wp_delete_comment( (int) $didit_note_id, true );
 }
 
 // Verification results stored on orders and products, with and without WooCommerce order tables.

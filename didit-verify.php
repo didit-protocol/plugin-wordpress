@@ -2809,38 +2809,182 @@ final class Didit_Verify
   }
 
   /**
-   * Delete a person's Didit results from this site: their verification status and
-   * check summaries, sign-in link and the session records bound to them. Verification
-   * data held by Didit is deleted from the Didit Console.
+   * Delete a person's Didit results from this site: every session record bound to their
+   * account or to their orders (current and superseded), the verification status and
+   * check summaries on their account and on every order placed with their email or
+   * account (guest orders included), the plugin's result notes on those orders, and
+   * their sign-in link. Verification data held by Didit is deleted from the Didit Console.
+   * Orders are processed in pages, as WordPress asks erasers to do.
    */
   public function erase_personal_data($email, $page = 1)
   {
+    $per_page = 50;
+    $page = max(1, (int) $page);
     $user = get_user_by('email', $email);
-    if (!$user) {
-      return ['items_removed' => false, 'items_retained' => false, 'messages' => [], 'done' => true];
+    $user_id = $user ? (int) $user->ID : 0;
+    $removed = false;
+
+    $orders = [];
+    if (function_exists('wc_get_orders')) {
+      $orders = wc_get_orders([
+        'customer' => array_values(array_filter([$email, $user_id])),
+        'limit' => $per_page,
+        'paged' => $page,
+        'orderby' => 'ID',
+        'order' => 'ASC',
+        'type' => 'shop_order',
+      ]);
+      $orders = is_array($orders) ? $orders : [];
     }
-    $sessions = [];
-    foreach (['_didit_session_id', '_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_pending_session_id'] as $key) {
-      $sessions[] = (string) get_user_meta($user->ID, $key, true);
+    $order_ids = [];
+    foreach ($orders as $order) {
+      $order_ids[] = (int) $order->get_id();
+      $removed = $this->erase_order_results($order) || $removed;
     }
-    $map = get_user_meta($user->ID, '_didit_approved_workflows', true);
-    $sessions = array_merge($sessions, is_array($map) ? array_values($map) : []);
-    foreach (array_unique(array_filter($sessions)) as $session_id) {
-      $record = $this->stored_session($session_id);
-      if (is_array($record) && (int) ($record['user_id'] ?? 0) === (int) $user->ID) {
-        delete_option($this->session_key($session_id));
+
+    if (1 === $page && $user_id) {
+      foreach ($this->didit_user_meta_keys($user_id) as $key) {
+        $removed = delete_user_meta($user_id, $key) || $removed;
       }
     }
-    $removed = false;
-    foreach (['_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_verified', '_didit_session_id', '_didit_status', '_didit_verified_at', Didit_Verify_Report::META, '_didit_approved_workflows', '_didit_kyb_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_status', '_didit_kyb_verified_at', '_didit_kyb_report', Didit_Verify_Sign_In::META] as $key) {
-      $removed = delete_user_meta($user->ID, $key) || $removed;
+    if ($user_id || $order_ids) {
+      $removed = $this->erase_session_records(1 === $page ? $user_id : 0, $order_ids) || $removed;
     }
+
     return [
       'items_removed' => $removed,
       'items_retained' => false,
-      'messages' => [__('Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit.', 'didit-verify')],
-      'done' => true,
+      'messages' => $removed ? [__('Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit.', 'didit-verify')] : [],
+      'done' => count($orders) < $per_page,
     ];
+  }
+
+  /** Every user meta key this plugin wrote for the user (all start with _didit). */
+  private function didit_user_meta_keys(int $user_id): array
+  {
+    global $wpdb;
+    $keys = [
+      '_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_verified', '_didit_session_id', '_didit_status',
+      '_didit_verified_at', Didit_Verify_Report::META, '_didit_approved_workflows', '_didit_workflow_sessions',
+      '_didit_kyb_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_status', '_didit_kyb_verified_at', '_didit_kyb_report',
+      Didit_Verify_Sign_In::LEGACY_META, Didit_Verify_Sign_In::link_meta_key(),
+    ];
+    if (isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_col')) {
+      // Sign-in links are kept per site on multisite, so collect every key by prefix too.
+      // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- one-off lookup for a privacy erasure.
+      $found = $wpdb->get_col($wpdb->prepare(
+        "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key LIKE %s",
+        $user_id,
+        $wpdb->esc_like('_didit') . '%'
+      ));
+      $keys = array_merge($keys, is_array($found) ? $found : []);
+    }
+    return array_values(array_unique(array_filter($keys)));
+  }
+
+  /** Remove the Didit results stored on an order, and the plugin's notes on it. */
+  private function erase_order_results($order): bool
+  {
+    $removed = false;
+    $sessions = [(string) $order->get_meta('_didit_session_id'), (string) $order->get_meta('_didit_confirmed_session_id')];
+    $keys = ['_didit_session_id', '_didit_session_url', '_didit_status', '_didit_confirmed_session_id', '_didit_verified_at', Didit_Verify_Report::META];
+    if (method_exists($order, 'get_meta_data')) {
+      foreach ($order->get_meta_data() as $meta) {
+        $key = is_object($meta) ? (string) ($meta->key ?? '') : '';
+        if (0 === strpos($key, '_didit')) {
+          $keys[] = $key;
+        }
+      }
+    }
+    foreach (array_unique($keys) as $key) {
+      if ('' !== (string) $order->get_meta($key)) {
+        $order->delete_meta_data($key);
+        $removed = true;
+      }
+    }
+    if ($removed) {
+      $order->save();
+    }
+    if (method_exists('Didit_Verify_Actions', 'delete_result_notes')) {
+      $removed = Didit_Verify_Actions::delete_result_notes((int) $order->get_id()) > 0 || $removed;
+    }
+    foreach (array_unique(array_filter($sessions)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if (is_array($record)) {
+        $this->delete_session_record($session_id, $record);
+        $removed = true;
+      }
+    }
+    return $removed;
+  }
+
+  /**
+   * Delete every stored session bound to the user or to one of the orders, including
+   * superseded attempts that no pointer leads to any more.
+   */
+  private function erase_session_records(int $user_id, array $order_ids): bool
+  {
+    global $wpdb;
+    if (!isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_results')) {
+      return false;
+    }
+    $removed = false;
+    $last = '';
+    do {
+      // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the session records live in options under a hashed name.
+      $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name > %s ORDER BY option_name ASC LIMIT 500",
+        $wpdb->esc_like('didit_bound_') . '%',
+        $last
+      ));
+      $rows = is_array($rows) ? $rows : [];
+      foreach ($rows as $row) {
+        $last = (string) $row->option_name;
+        $record = maybe_unserialize($row->option_value);
+        if (!is_array($record)) {
+          continue;
+        }
+        $mine = ($user_id && ((int) ($record['user_id'] ?? 0) === $user_id || (int) ($record['consumed_user_id'] ?? 0) === $user_id))
+          || ($order_ids && (in_array((int) ($record['order_id'] ?? 0), $order_ids, true) || in_array((int) ($record['consumed_order_id'] ?? 0), $order_ids, true)));
+        if ($mine) {
+          delete_option($last);
+          $this->forget_visitor_pointers($record, '');
+          $removed = true;
+        }
+      }
+    } while (500 === count($rows));
+    return $removed;
+  }
+
+  private function delete_session_record(string $session_id, array $record)
+  {
+    delete_option($this->session_key($session_id));
+    $this->forget_visitor_pointers($record, $session_id);
+  }
+
+  /** Drop the browser's pointers and approvals that lead to an erased session. */
+  private function forget_visitor_pointers(array $record, string $session_id)
+  {
+    $owner = (string) ($record['owner'] ?? '');
+    if (!preg_match('/^[a-f0-9]{64}$/', $owner)) {
+      return;
+    }
+    // Without the session ID (found by scanning), the browser's pointers are dropped whole:
+    // they only ever lead to sessions of the same browser.
+    foreach ([$this->resume_key($owner), $this->registration_key($owner)] as $key) {
+      if ('' === $session_id || (string) get_option($key, '') === $session_id) {
+        delete_option($key);
+      }
+    }
+    $map = get_option('didit_approved_' . $owner, []);
+    if (is_array($map)) {
+      $kept = '' === $session_id ? [] : array_filter($map, function ($id) use ($session_id) { return $id !== $session_id; });
+      if ($kept) {
+        update_option('didit_approved_' . $owner, $kept, false);
+      } else {
+        delete_option('didit_approved_' . $owner);
+      }
+    }
   }
 
   /** Every check's result on the user's profile, for admins who can edit the user. */
@@ -3005,6 +3149,9 @@ final class Didit_Verify
       && !$order->get_meta('_didit_hold_released')
     ) {
       Didit_Verify_Actions::add_hold_reason($order, 'identity');
+      $order->save();
+    } elseif ('Approved' === $this->confirmed_order_status($order) && in_array('identity', Didit_Verify_Actions::hold_reasons($order), true)) {
+      Didit_Verify_Actions::remove_hold_reason($order, 'identity');
       $order->save();
     }
     Didit_Verify_Actions::enforce_holds($order_id, $from, $to, $order);
