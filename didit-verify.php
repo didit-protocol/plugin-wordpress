@@ -66,6 +66,7 @@ final class Didit_Verify
 
     add_action('woocommerce_loaded', [$this, 'wc_hooks']);
 
+    add_filter('wp_privacy_personal_data_erasers', [$this, 'register_eraser']);
     add_action('show_user_profile', [$this, 'user_profile_report']);
     add_action('edit_user_profile', [$this, 'user_profile_report']);
 
@@ -1194,7 +1195,7 @@ final class Didit_Verify
     return is_string($session_id) && 1 === preg_match('/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i', $session_id);
   }
 
-  private function session_key($session_id): string
+  public function session_key($session_id): string
   {
     return 'didit_bound_' . hash('sha256', $session_id);
   }
@@ -2425,6 +2426,11 @@ final class Didit_Verify
     if ('didit_verified' !== $column_name) {
       return $output;
     }
+    $kyb = (string) get_user_meta($user_id, '_didit_kyb_status', true);
+    if ($kyb) {
+      /* translators: %s: business verification status. */
+      $output .= $this->admin_status_badge($kyb, sprintf(__('Business (KYB): %s', 'didit-verify'), $kyb)) . ' ';
+    }
     $status = $this->confirmed_user_status($user_id);
     $date = get_user_meta($user_id, '_didit_verified_at', true);
 
@@ -2592,6 +2598,50 @@ final class Didit_Verify
       );
     }
     Didit_Verify_Actions::render_order_results($order);
+  }
+
+  public function register_eraser($erasers)
+  {
+    $erasers['didit-verify'] = [
+      'eraser_friendly_name' => __('Didit verification', 'didit-verify'),
+      'callback' => [$this, 'erase_personal_data'],
+    ];
+    return $erasers;
+  }
+
+  /**
+   * Delete a person's Didit results from this site: their verification status and
+   * check summaries, sign-in link and the session records bound to them. Verification
+   * data held by Didit is deleted from the Didit Console.
+   */
+  public function erase_personal_data($email, $page = 1)
+  {
+    $user = get_user_by('email', $email);
+    if (!$user) {
+      return ['items_removed' => false, 'items_retained' => false, 'messages' => [], 'done' => true];
+    }
+    $sessions = [];
+    foreach (['_didit_session_id', '_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_pending_session_id'] as $key) {
+      $sessions[] = (string) get_user_meta($user->ID, $key, true);
+    }
+    $map = get_user_meta($user->ID, '_didit_approved_workflows', true);
+    $sessions = array_merge($sessions, is_array($map) ? array_values($map) : []);
+    foreach (array_unique(array_filter($sessions)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if (is_array($record) && (int) ($record['user_id'] ?? 0) === (int) $user->ID) {
+        delete_option($this->session_key($session_id));
+      }
+    }
+    $removed = false;
+    foreach (['_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_verified', '_didit_session_id', '_didit_status', '_didit_verified_at', Didit_Verify_Report::META, '_didit_approved_workflows', '_didit_kyb_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_status', '_didit_kyb_verified_at', '_didit_kyb_report', Didit_Verify_Sign_In::META] as $key) {
+      $removed = delete_user_meta($user->ID, $key) || $removed;
+    }
+    return [
+      'items_removed' => $removed,
+      'items_retained' => false,
+      'messages' => [__('Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit.', 'didit-verify')],
+      'done' => true,
+    ];
   }
 
   /** Every check's result on the user's profile, for admins who can edit the user. */
