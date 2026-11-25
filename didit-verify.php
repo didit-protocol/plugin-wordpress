@@ -2887,7 +2887,14 @@ final class Didit_Verify
   {
     $removed = false;
     $sessions = [(string) $order->get_meta('_didit_session_id'), (string) $order->get_meta('_didit_confirmed_session_id')];
-    $keys = ['_didit_session_id', '_didit_session_url', '_didit_status', '_didit_confirmed_session_id', '_didit_verified_at', Didit_Verify_Report::META];
+    $keys = ['_didit_session_id', '_didit_session_url', '_didit_status', '_didit_confirmed_session_id', '_didit_verified_at', Didit_Verify_Report::META,
+      '_didit_aml', '_didit_aml_requested', '_didit_aml_runs', '_didit_hold_reasons', '_didit_held', '_didit_held_from', '_didit_hold_released', '_didit_reminder_count'];
+    foreach (['phone', 'email'] as $channel) {
+      foreach (['status', 'verified_hash', 'sent_hash'] as $suffix) {
+        $keys[] = '_didit_' . $channel . '_' . $suffix;
+      }
+    }
+    // WooCommerce orders list their meta, which also catches keys of other versions.
     if (method_exists($order, 'get_meta_data')) {
       foreach ($order->get_meta_data() as $meta) {
         $key = is_object($meta) ? (string) ($meta->key ?? '') : '';
@@ -2897,7 +2904,8 @@ final class Didit_Verify
       }
     }
     foreach (array_unique($keys) as $key) {
-      if ('' !== (string) $order->get_meta($key)) {
+      $value = $order->get_meta($key);
+      if ('' !== $value && null !== $value && [] !== $value) {
         $order->delete_meta_data($key);
         $removed = true;
       }
