@@ -141,15 +141,35 @@ final class Didit_Verify_Report
       ], [__CLASS__, 'keep']);
     }
 
-    foreach (self::items($decision, 'document_verifications', 'document', $truncated) as $item) {
+    // Business documents: each document's type and status and the groups still missing.
+    // File links and extracted text are never kept.
+    foreach (self::items($decision, 'document_verifications', 'documents', $truncated) as $item) {
+      $flags = [];
+      foreach (array_slice(is_array($item['items'] ?? null) ? array_values(array_filter($item['items'], 'is_array')) : [], 0, self::MAX_HITS) as $doc) {
+        $flags[] = trim(self::label($doc['document_type'] ?? '') . ': ' . self::text($doc['status'] ?? ''), ': ');
+      }
+      foreach (is_array($item['groups'] ?? null) ? $item['groups'] : [] as $group => $counts) {
+        if (is_array($counts) && (int) ($counts['missing'] ?? 0) > 0) {
+          /* translators: %s: document group, such as "legal presence". */
+          $flags[] = sprintf(__('missing %s', 'didit-verify'), self::label($group));
+        }
+      }
       $summary['checks'][] = array_filter([
-        'type' => 'document',
+        'type' => 'documents',
         'status' => self::text($item['status'] ?? ''),
-        'document' => self::document($item),
+        'flags' => array_values(array_filter($flags)),
       ], [__CLASS__, 'keep']);
     }
+    foreach (self::items($decision, 'document_ai_documents', 'document_ai', $truncated) as $item) {
+      $summary['checks'][] = ['type' => 'document_ai', 'status' => self::text($item['status'] ?? '')];
+    }
+    // Questionnaires: the status and the site's own questionnaire title, never an answer.
     foreach (self::items($decision, 'questionnaire_responses', 'questionnaire', $truncated) as $item) {
-      $summary['checks'][] = ['type' => 'questionnaire', 'status' => self::text($item['status'] ?? '')];
+      $summary['checks'][] = array_filter([
+        'type' => 'questionnaire',
+        'status' => self::text($item['status'] ?? ''),
+        'value' => self::text($item['title'] ?? ''),
+      ], [__CLASS__, 'keep']);
     }
 
     if ($truncated) {
@@ -214,6 +234,12 @@ final class Didit_Verify_Report
     ]));
   }
 
+  /** A machine name such as "certificate_of_incorporation" as readable words. */
+  private static function label($value): string
+  {
+    return str_replace('_', ' ', self::text($value));
+  }
+
   private static function text($value): string
   {
     return is_scalar($value) ? substr(sanitize_text_field((string) $value), 0, 120) : '';
@@ -247,7 +273,8 @@ final class Didit_Verify_Report
       'key_people' => __('Key people', 'didit-verify'),
       'bank' => __('Bank verification', 'didit-verify'),
       'ip' => __('IP analysis', 'didit-verify'),
-      'document' => __('Additional document', 'didit-verify'),
+      'documents' => __('Business documents', 'didit-verify'),
+      'document_ai' => __('Additional documents', 'didit-verify'),
       'questionnaire' => __('Questionnaire', 'didit-verify'),
     ];
     return $labels[$type] ?? $type;

@@ -1725,8 +1725,9 @@ final class Didit_Verify
   private function checkout_session_is_approved($session_id): bool
   {
     $record = $this->stored_session($session_id);
-    if (!$this->session_belongs_to_request($record) || !empty($record['consumed_order_id'])
-      || $this->session_workflow((string) $session_id, $record) !== Didit_Verify_Workflows::workflow_for('checkout')) {
+    $workflow_id = Didit_Verify_Workflows::workflow_for('checkout');
+    if ('' === $workflow_id || !$this->session_belongs_to_request($record) || !empty($record['consumed_order_id'])
+      || $this->session_workflow((string) $session_id, $record) !== $workflow_id) {
       return false;
     }
     return 'Approved' === $this->confirm_session($session_id) && $this->record_kind_matches($this->stored_session($session_id));

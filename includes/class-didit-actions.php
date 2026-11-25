@@ -29,6 +29,7 @@ final class Didit_Verify_Actions
     add_action('woocommerce_store_api_checkout_order_processed', [__CLASS__, 'maybe_schedule_aml'], 20, 1);
     add_filter('woocommerce_order_actions', [__CLASS__, 'order_actions'], 10, 1);
     add_action('woocommerce_order_action_didit_aml_screen', [__CLASS__, 'order_action_screen']);
+    add_action('woocommerce_order_status_changed', [__CLASS__, 'enforce_holds'], 21, 4);
 
     add_action('woocommerce_thankyou', [__CLASS__, 'contact_box_echo'], 12);
     add_action('woocommerce_view_order', [__CLASS__, 'contact_box_echo'], 6);
@@ -120,13 +121,24 @@ final class Didit_Verify_Actions
   {
     $order->update_meta_data('_didit_aml_runs', (int) $order->get_meta('_didit_aml_runs') + 1);
     $order->save();
-    self::screen_order($order->get_id());
+    self::screen_order($order->get_id(), true);
   }
 
-  public static function screen_order($order_id)
+  /**
+   * Runs one screening. The background job is the automatic path, so it checks again,
+   * when it actually runs, that the admin still wants automatic screening for this order:
+   * a backlog queued before the setting was turned off must not send billing data.
+   * An explicit admin rerun from the order actions ($manual) is always allowed.
+   */
+  public static function screen_order($order_id, $manual = false)
   {
     $order = function_exists('wc_get_order') ? wc_get_order($order_id) : null;
     if (!$order) {
+      return;
+    }
+    if (!$manual && (!get_option('didit_aml_enabled', false)
+      || (float) $order->get_total() < (float) get_option('didit_aml_threshold', 0))) {
+      $order->add_order_note(__('Didit: automatic AML screening skipped because it is no longer enabled for this order.', 'didit-verify'));
       return;
     }
     $name = self::billing_name($order);
@@ -160,17 +172,184 @@ final class Didit_Verify_Actions
     $summary = Didit_Verify_Report::aml($aml);
     $summary['screened_at'] = time();
     $order->update_meta_data('_didit_aml', $summary);
-    $order->add_order_note(sprintf(
+    self::add_result_note($order, sprintf(
       /* translators: 1: AML status, 2: number of hits. */
       __('Didit: AML screening of the billing name: %1$s, %2$d hit(s).', 'didit-verify'),
       $summary['status'] ?? '',
       (int) ($summary['hits_total'] ?? 0)
     ));
-    $order->save();
-    if (get_option('didit_aml_hold', false) && in_array($summary['status'] ?? '', ['In Review', 'Declined'], true)
-      && $order->has_status(['pending', 'processing'])) {
-      $order->update_status('on-hold', __('Didit: order held until the AML screening is reviewed.', 'didit-verify'));
+    $flagged = in_array($summary['status'] ?? '', ['In Review', 'Declined'], true);
+    if ($flagged && get_option('didit_aml_hold', false)) {
+      // The reason is kept whatever the current status, so an identity approval cannot
+      // release the order while this result is outstanding. Unpaid orders keep their status
+      // and are held by enforce_holds() when payment moves them to processing or completed.
+      self::add_hold_reason($order, 'aml');
+      $order->save();
+      if ($order->has_status(['processing', 'completed'])) {
+        self::hold($order, $order->has_status('completed') ? 'completed' : 'processing');
+      }
+      return;
     }
+    if (!$flagged && in_array('aml', self::hold_reasons($order), true)) {
+      // A clean rerun resolves the AML reason; the order is released only if nothing else is outstanding.
+      self::remove_hold_reason($order, 'aml');
+      $order->save();
+      self::release_hold($order, __('Didit: AML screening cleared - order released.', 'didit-verify'));
+      return;
+    }
+    $order->save();
+  }
+
+  /* ── Order holds ── */
+
+  const HOLD_REASONS = '_didit_hold_reasons';
+
+  /**
+   * Add a Didit result note to the order and mark it, so uninstall and the personal-data
+   * eraser can remove exactly these notes without touching the merchant's own notes.
+   *
+   * @return int The note (comment) ID, or 0.
+   */
+  public static function add_result_note($order, string $text): int
+  {
+    $note_id = (int) $order->add_order_note($text);
+    if ($note_id > 0 && function_exists('add_comment_meta')) {
+      add_comment_meta($note_id, '_didit_result_note', 1, true);
+    }
+    return $note_id;
+  }
+
+  /** Delete the Didit result notes of one order. Returns the number of notes deleted. */
+  public static function delete_result_notes(int $order_id): int
+  {
+    if ($order_id <= 0 || !function_exists('get_comments')) {
+      return 0;
+    }
+    // WooCommerce hides order notes from comment queries; lift that filter as wc_get_order_notes() does.
+    $filter = ['WC_Comments', 'exclude_order_comments'];
+    $removed = remove_filter('comments_clauses', $filter, 10);
+    $ids = get_comments([
+      'post_id' => $order_id,
+      'type' => 'order_note',
+      'status' => 'any',
+      'meta_key' => '_didit_result_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- erasure of a few notes.
+      'fields' => 'ids',
+      'number' => 0,
+    ]);
+    if ($removed) {
+      add_filter('comments_clauses', $filter, 10, 1);
+    }
+    $deleted = 0;
+    foreach ((array) $ids as $id) {
+      $deleted += wp_delete_comment((int) $id, true) ? 1 : 0;
+    }
+    return $deleted;
+  }
+
+  /** Outstanding reasons ('identity', 'aml') for which Didit keeps the order from being fulfilled. */
+  public static function hold_reasons($order): array
+  {
+    $reasons = $order->get_meta(self::HOLD_REASONS);
+    return is_array($reasons) ? array_values(array_intersect(['identity', 'aml'], $reasons)) : [];
+  }
+
+  /** Callers save the order. */
+  public static function add_hold_reason($order, string $reason)
+  {
+    $reasons = self::hold_reasons($order);
+    if (!in_array($reason, $reasons, true)) {
+      $reasons[] = $reason;
+      $order->update_meta_data(self::HOLD_REASONS, $reasons);
+    }
+  }
+
+  /** Callers save the order. */
+  public static function remove_hold_reason($order, string $reason)
+  {
+    $reasons = self::hold_reasons($order);
+    if (in_array($reason, $reasons, true)) {
+      $order->update_meta_data(self::HOLD_REASONS, array_values(array_diff($reasons, [$reason])));
+    }
+  }
+
+  /** Put the order on hold for its outstanding reasons, remembering the status to return to. */
+  private static function hold($order, string $from)
+  {
+    $order->update_meta_data('_didit_held', 'yes');
+    $order->update_meta_data('_didit_held_from', in_array($from, ['processing', 'completed'], true) ? $from : 'processing');
+    $order->save();
+    $order->update_status('on-hold');
+    self::add_result_note($order, sprintf(
+      /* translators: %s: list of outstanding checks. */
+      __('Didit: order held until these checks are resolved: %s.', 'didit-verify'),
+      implode(', ', self::reason_labels(self::hold_reasons($order)))
+    ));
+  }
+
+  private static function reason_labels(array $reasons): array
+  {
+    $labels = ['identity' => __('identity verification', 'didit-verify'), 'aml' => __('AML screening', 'didit-verify')];
+    return array_map(function ($reason) use ($labels) {
+      return $labels[$reason] ?? $reason;
+    }, $reasons);
+  }
+
+  /**
+   * Release an order Didit put on hold, but only once no reason is outstanding.
+   * Returns true when the order was released.
+   */
+  public static function release_hold($order, string $note): bool
+  {
+    if ('yes' !== $order->get_meta('_didit_held') || !$order->has_status('on-hold') || self::hold_reasons($order)) {
+      return false;
+    }
+    $to = (string) $order->get_meta('_didit_held_from') ?: 'processing';
+    // Cleared before the status change so enforce_holds() does not take it for a manual release.
+    $order->delete_meta_data('_didit_held');
+    $order->delete_meta_data('_didit_held_from');
+    $order->save();
+    $order->update_status($to);
+    self::add_result_note($order, $note);
+    return true;
+  }
+
+  /**
+   * woocommerce_order_status_changed: gate fulfillment on every outstanding Didit reason.
+   *
+   * Manual merchant edits win: when an order Didit held leaves on-hold through anything
+   * other than release_hold(), the merchant released it. The outstanding reasons are then
+   * cleared and noted, and the order is not held again for them (the core identity check
+   * honours `_didit_hold_released`). Only a new flagged AML result can hold it again.
+   */
+  public static function enforce_holds($order_id, $from, $to, $order = null)
+  {
+    static $busy = false;
+    $order = is_object($order) ? $order : (function_exists('wc_get_order') ? wc_get_order($order_id) : null);
+    if ($busy || !$order) {
+      return;
+    }
+    if ('on-hold' === $from && 'on-hold' !== $to && 'yes' === $order->get_meta('_didit_held')) {
+      $reasons = self::hold_reasons($order);
+      $order->delete_meta_data('_didit_held');
+      $order->delete_meta_data('_didit_held_from');
+      $order->update_meta_data(self::HOLD_REASONS, []);
+      $order->update_meta_data('_didit_hold_released', 'yes');
+      $order->save();
+      if ($reasons) {
+        $order->add_order_note(sprintf(
+          /* translators: %s: list of outstanding checks. */
+          __('Didit: hold released manually while these checks were outstanding: %s. Didit will not hold this order again for them.', 'didit-verify'),
+          implode(', ', self::reason_labels($reasons))
+        ));
+      }
+      return;
+    }
+    if (!in_array($to, ['processing', 'completed'], true) || !$order->has_status($to) || !self::hold_reasons($order)) {
+      return;
+    }
+    $busy = true;
+    self::hold($order, (string) $to);
+    $busy = false;
   }
 
   public static function render_order_results($order)
