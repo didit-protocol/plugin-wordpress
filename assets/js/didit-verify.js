@@ -249,6 +249,10 @@
       if (btn.dataset.display === "redirect") {
         requestBody.return_url = pageUrl();
       }
+      // The server maps the placement to the workflow the admin chose for it.
+      if (btn.dataset.placement) {
+        requestBody.placement = btn.dataset.placement;
+      }
 
       fetch(cfg.restUrl, {
         method: "POST",

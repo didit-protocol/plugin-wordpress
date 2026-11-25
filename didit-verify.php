@@ -2321,7 +2321,9 @@ final class Didit_Verify
       'text' => $btn_text,
       'success_text' => $btn_success,
       'mode' => '',
+      'placement' => 'default',
     ], $atts, 'didit_verify');
+    $placement = Didit_Verify_Workflows::is_placement((string) $a['placement']) ? (string) $a['placement'] : 'default';
 
     $display = $a['mode'] ? $a['mode'] : get_option('didit_display_mode', 'modal');
     $is_embedded = ('embedded' === $display);
@@ -2329,6 +2331,9 @@ final class Didit_Verify
     $container_attr = $is_embedded ? sprintf(' data-container="%s"', esc_attr($container_id)) : '';
     if ('redirect' === $display) {
       $container_attr .= ' data-display="redirect"';
+    }
+    if ('default' !== $placement) {
+      $container_attr .= sprintf(' data-placement="%s"', esc_attr($placement));
     }
 
     $embed_html = $is_embedded
@@ -2535,7 +2540,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" <?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout" <?php echo $button_attrs; ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <input type="hidden" name="didit_session_id" id="didit_session_id" value="" />
@@ -2859,7 +2864,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1"<?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout"<?php echo $button_attrs; ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <?php if ($is_embedded): ?>
