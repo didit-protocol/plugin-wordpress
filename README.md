@@ -14,6 +14,22 @@ Identity verification for WordPress & WooCommerce using the [Didit SDK](https://
 | **Translatable** | All customer-facing text is translatable; German (`de_DE`, `de_DE_formal`) included |
 | **Product scope** | Require verification for all products, only selected products, or all except selected |
 | **Secure** | API key stays server-side; CSRF nonce + rate limiting on session endpoint |
+| **Workflows per placement** | Lists your Didit workflows and their checks; pick one for registration, checkout, age-restricted products and categories, My Account and business customers (KYB) |
+| **Every result** | Orders and user profiles show each check: ID, liveness, face match, age, AML hits and ongoing monitoring, phone, email, proof of address, database validation, KYB registry |
+| **Direct checks** | Optional AML screening of the billing name above an order amount, and phone/email one-time codes |
+| **Sign in with Didit** | Optional OpenID Connect (PKCE) sign-in on wp-login, including passkeys |
+
+## Install
+
+Install from WordPress: **Plugins > Add New**, search for **Didit Verify**, then **Install Now** and **Activate**.
+Then configure it in **Settings > Didit Verify** (see [Configure](#3-configure)).
+The Quick Start below is for working on the plugin itself.
+
+## Releases
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`: it checks that the tag, the plugin header, `DIDIT_VERIFY_VERSION` and the readme `Stable tag` agree (`bin/check-version.sh`), runs the tests, builds the zip without the files in `.distignore` (`bin/build-zip.sh`) and publishes trunk, `tags/VERSION` and the listing images in `.wordpress-org/` to the WordPress.org SVN (`bin/deploy-svn.sh`).
+It needs the repository secrets `SVN_USERNAME` and `SVN_PASSWORD`; without them it attaches the zip to the run and skips publishing with a notice.
+Run it by hand (**Actions > Release to WordPress.org > Run workflow**) with **dry_run** to stage the SVN changes without committing them.
 
 ## Verification decisions
 
@@ -305,13 +321,16 @@ All data is sanitized server-side before being sent to the Didit API.
 ```
 wordpress-plugin/
 ├── didit-verify.php              # Plugin logic (admin, REST API, shortcode, WC)
+├── includes/                     # Workflows, placements, results, direct checks, sign-in
 ├── assets/
 │   ├── css/didit-verify.css      # Structural styles (embed container)
 │   └── js/didit-verify.js        # Frontend SDK integration
 ├── languages/                    # POT template + German translations (de_DE, de_DE_formal)
 ├── uninstall.php                 # Cleans up options on plugin deletion
 ├── readme.txt                    # WordPress.org plugin directory format
-├── tests/                         # Webhook signature tests (plain PHP, no dependencies)
+├── tests/                        # Plain PHP tests, no dependencies
+├── bin/                          # Version check, release build and WordPress.org deploy
+├── .wordpress-org/               # Listing banners, icons and screenshots (SVN assets/)
 ├── docker-compose.yml            # Local dev (WordPress + MySQL)
 └── README.md
 ```
@@ -447,11 +466,13 @@ document.addEventListener('didit:complete', function (e) {
 |--------|----------|-------------|------|
 | `POST` | `/wp-json/didit/v1/session` | Create a verification session | CSRF nonce + login, or order key (after-purchase) |
 | `POST` | `/wp-json/didit/v1/verify` | Confirm the bound session with Didit and update its status | REST nonce and browser/user binding, or a valid order key |
-| `POST` | `/wp-json/didit/v1/webhook` | Didit webhook receiver (`status.updated`) | HMAC-SHA256 signature (`X-Signature-V2` → `X-Signature` → `X-Signature-Simple`) + timestamp |
+| `POST` | `/wp-json/didit/v1/webhook` | Didit webhook receiver (`status.updated`, `data.updated`) | HMAC-SHA256 signature (`X-Signature-V2` → `X-Signature` → `X-Signature-Simple`) + timestamp |
+| `POST` | `/wp-json/didit/v1/contact/send` | Send a one-time code to the order's phone or email | REST nonce + order key |
+| `POST` | `/wp-json/didit/v1/contact/check` | Check the code and mark the contact verified | REST nonce + order key |
 
 ## Uninstall
 
-When the plugin is deleted via the WordPress admin, `uninstall.php` removes all plugin options from the database. The plugin also removes its user verification metadata and session bindings.
+When the plugin is deleted via the WordPress admin, `uninstall.php` removes all plugin options, session bindings, user verification metadata and every `_didit_*` result stored on orders and products. The WordPress personal data eraser removes one person's Didit results.
 
 ## Install WooCommerce (for testing)
 
@@ -482,7 +503,7 @@ GPL-2.0-or-later — Copyright © 2025 Didit.
 
 ## Tests
 
-Run `php tests/test-shortcode-assets.php`, `php tests/test-webhook-signature.php` and `php tests/test-verification-authorization.php`.
+Run every suite with `for t in tests/test-*.php; do php "$t" || break; done` and the release check with `tests/test-check-version.sh`.
 The local end-to-end fixture in `tests/e2e/fixture-api.php` intercepts Didit HTTP calls only when `WP_ENVIRONMENT_TYPE` is `local`.
 It must never be installed on a production site.
 The release was also checked through actual WordPress REST requests, classic WooCommerce checkout and the Store API checkout with synthetic customers and upstream decisions.
