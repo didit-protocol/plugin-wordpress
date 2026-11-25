@@ -41,25 +41,72 @@ $didit_verify_options = [
 	'didit_btn_padding_h',
 	'didit_btn_font_size',
 	'didit_vendor_data',
+	'didit_console_url',
+	'didit_placements',
+	'didit_registration_enabled',
+	'didit_gate_enabled',
+	'didit_my_account_enabled',
+	'didit_business_enabled',
+	'didit_gate_categories',
+	'didit_aml_enabled',
+	'didit_aml_threshold',
+	'didit_aml_monitoring',
+	'didit_aml_hold',
+	'didit_contact_phone',
+	'didit_contact_email',
+	'didit_signin_enabled',
+	'didit_signin_publishable_key',
+	'didit_signin_application_id',
 ];
 
 foreach ( $didit_verify_options as $didit_verify_option ) {
 	delete_option( $didit_verify_option );
 }
 
+delete_transient( 'didit_workflows_cache' );
+
 if ( function_exists( 'as_unschedule_all_actions' ) ) {
 	as_unschedule_all_actions( 'didit_wc_verification_reminder' );
+	as_unschedule_all_actions( 'didit_aml_screen_order' );
+}
+wp_clear_scheduled_hook( 'didit_aml_screen_order' );
+
+// Remove the session bindings and resume pointers created by this plugin, including object-cache entries.
+global $wpdb;
+foreach ( [ 'didit_bound_', 'didit_resume_' ] as $didit_prefix ) {
+	$didit_binding_keys = $wpdb->get_col( $wpdb->prepare(
+		"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
+		$wpdb->esc_like( $didit_prefix ) . '%'
+	) );
+	foreach ( $didit_binding_keys as $didit_binding_key ) {
+		delete_option( $didit_binding_key );
+	}
+}
+$didit_user_meta_keys = [
+	'_didit_confirmed_session_id',
+	'_didit_pending_session_id',
+	'_didit_verified',
+	'_didit_session_id',
+	'_didit_status',
+	'_didit_verified_at',
+	'_didit_report',
+	'_didit_approved_workflows',
+	'_didit_kyb_pending_session_id',
+	'_didit_kyb_session_id',
+	'_didit_kyb_status',
+	'_didit_kyb_verified_at',
+	'_didit_kyb_report',
+	'_didit_auth_sub',
+];
+foreach ( $didit_user_meta_keys as $didit_meta_key ) {
+	delete_metadata( 'user', 0, $didit_meta_key, '', true );
 }
 
-// Remove the session bindings created by this plugin, including object-cache entries.
-global $wpdb;
-$didit_binding_keys = $wpdb->get_col($wpdb->prepare(
-  "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
-  $wpdb->esc_like('didit_bound_') . '%'
-));
-foreach ($didit_binding_keys as $didit_binding_key) {
-  delete_option($didit_binding_key);
+// Verification results stored on orders and products, with and without WooCommerce order tables.
+// phpcs:disable WordPress.DB.DirectDatabaseQuery
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s", $wpdb->esc_like( '_didit_' ) . '%' ) );
+$didit_orders_meta = $wpdb->prefix . 'wc_orders_meta';
+if ( $didit_orders_meta === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $didit_orders_meta ) ) ) {
+	$wpdb->query( $wpdb->prepare( "DELETE FROM {$didit_orders_meta} WHERE meta_key LIKE %s", $wpdb->esc_like( '_didit_' ) . '%' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name built from the prefix.
 }
-foreach (['_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_verified', '_didit_session_id', '_didit_status', '_didit_verified_at'] as $didit_meta_key) {
-  delete_metadata('user', 0, $didit_meta_key, '', true);
-}
+// phpcs:enable
