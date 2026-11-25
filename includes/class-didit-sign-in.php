@@ -193,6 +193,9 @@ final class Didit_Verify_Sign_In
 
   private static function set_browser_cookie(string $value, int $expires)
   {
+    if (headers_sent()) {
+      return;
+    }
     setcookie(self::COOKIE, $value, [
       'expires' => $expires,
       'path' => '/',
