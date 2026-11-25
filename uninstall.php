@@ -74,7 +74,7 @@ wp_clear_scheduled_hook( 'didit_aml_screen_order' );
 // Remove the session bindings and resume pointers created by this plugin, including object-cache entries.
 // phpcs:disable WordPress.DB.DirectDatabaseQuery -- one-time cleanup on uninstall.
 global $wpdb;
-foreach ( [ 'didit_bound_', 'didit_resume_' ] as $didit_prefix ) {
+foreach ( [ 'didit_bound_', 'didit_resume_', 'didit_approved_' ] as $didit_prefix ) {
 	$didit_binding_keys = $wpdb->get_col( $wpdb->prepare(
 		"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
 		$wpdb->esc_like( $didit_prefix ) . '%'

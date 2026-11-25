@@ -1422,6 +1422,9 @@ final class Didit_Verify
     if ($user_id) {
       $this->update_workflow_approval($user_id, $this->record_workflow($record), $session_id, $status);
     }
+    if (!empty($record['owner']) && is_string($record['owner'])) {
+      $this->update_visitor_approval($record['owner'], $this->record_workflow($record), $session_id, $status);
+    }
     if (!empty($record['order_id']) && function_exists('wc_get_order')) {
       $order = wc_get_order($record['order_id']);
       if ($order && (string) $order->get_meta('_didit_session_id') === $session_id) {
@@ -1462,6 +1465,32 @@ final class Didit_Verify
     }
   }
 
+  /**
+   * The same per-workflow approvals for the browser that verified, so a visitor without
+   * an account keeps an age approval while starting another check, such as checkout.
+   */
+  private function update_visitor_approval(string $owner, string $workflow_id, string $session_id, string $status)
+  {
+    if ('' === $workflow_id || !preg_match('/^[a-f0-9]{64}$/', $owner)) {
+      return;
+    }
+    $key = 'didit_approved_' . $owner;
+    $map = get_option($key, []);
+    $map = is_array($map) ? $map : [];
+    if ('Approved' === $status) {
+      $map[$workflow_id] = $session_id;
+    } elseif (($map[$workflow_id] ?? '') === $session_id) {
+      unset($map[$workflow_id]);
+    } else {
+      return;
+    }
+    if ($map) {
+      update_option($key, $map, false);
+    } else {
+      delete_option($key);
+    }
+  }
+
   /** Whether a confirmed Didit decision of this workflow currently approves the user. */
   public function user_has_workflow_approval(int $user_id, string $workflow_id): bool
   {
@@ -1485,9 +1514,15 @@ final class Didit_Verify
     if ('' === $owner || '' === $workflow_id) {
       return false;
     }
-    $session_id = (string) get_option($this->resume_key($owner), '');
-    $record = $this->stored_session($session_id);
-    return $this->session_belongs_to_request($record) && $this->record_approves($record, $workflow_id, (int) ($record['user_id'] ?? 0));
+    $map = get_option('didit_approved_' . $owner, []);
+    $candidates = [is_array($map) ? (string) ($map[$workflow_id] ?? '') : '', (string) get_option($this->resume_key($owner), '')];
+    foreach (array_unique(array_filter($candidates)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if ($this->session_belongs_to_request($record) && $this->record_approves($record, $workflow_id, (int) ($record['user_id'] ?? 0))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private function record_approves($record, string $workflow_id, int $user_id): bool
