@@ -78,7 +78,8 @@ final class Didit_Verify
 
   public function load_textdomain()
   {
-    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    // Loads the German translations bundled in languages/; WordPress.org language packs still take precedence.
+    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages'); // phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound
   }
 
   public function admin_menu()
@@ -1274,7 +1275,7 @@ final class Didit_Verify
 
   public function verification_owner(bool $create = false): string
   {
-    $cookie = $_COOKIE['didit_verification_owner'] ?? '';
+    $cookie = isset($_COOKIE['didit_verification_owner']) ? sanitize_text_field(wp_unslash($_COOKIE['didit_verification_owner'])) : '';
     if (!is_string($cookie) || !preg_match('/^[a-f0-9]{64}$/', $cookie)) {
       if (!$create) {
         return '';
@@ -1421,6 +1422,9 @@ final class Didit_Verify
     if ($user_id) {
       $this->update_workflow_approval($user_id, $this->record_workflow($record), $session_id, $status);
     }
+    if (!empty($record['owner']) && is_string($record['owner'])) {
+      $this->update_visitor_approval($record['owner'], $this->record_workflow($record), $session_id, $status);
+    }
     if (!empty($record['order_id']) && function_exists('wc_get_order')) {
       $order = wc_get_order($record['order_id']);
       if ($order && (string) $order->get_meta('_didit_session_id') === $session_id) {
@@ -1461,6 +1465,32 @@ final class Didit_Verify
     }
   }
 
+  /**
+   * The same per-workflow approvals for the browser that verified, so a visitor without
+   * an account keeps an age approval while starting another check, such as checkout.
+   */
+  private function update_visitor_approval(string $owner, string $workflow_id, string $session_id, string $status)
+  {
+    if ('' === $workflow_id || !preg_match('/^[a-f0-9]{64}$/', $owner)) {
+      return;
+    }
+    $key = 'didit_approved_' . $owner;
+    $map = get_option($key, []);
+    $map = is_array($map) ? $map : [];
+    if ('Approved' === $status) {
+      $map[$workflow_id] = $session_id;
+    } elseif (($map[$workflow_id] ?? '') === $session_id) {
+      unset($map[$workflow_id]);
+    } else {
+      return;
+    }
+    if ($map) {
+      update_option($key, $map, false);
+    } else {
+      delete_option($key);
+    }
+  }
+
   /** Whether a confirmed Didit decision of this workflow currently approves the user. */
   public function user_has_workflow_approval(int $user_id, string $workflow_id): bool
   {
@@ -1484,9 +1514,15 @@ final class Didit_Verify
     if ('' === $owner || '' === $workflow_id) {
       return false;
     }
-    $session_id = (string) get_option($this->resume_key($owner), '');
-    $record = $this->stored_session($session_id);
-    return $this->session_belongs_to_request($record) && $this->record_approves($record, $workflow_id, (int) ($record['user_id'] ?? 0));
+    $map = get_option('didit_approved_' . $owner, []);
+    $candidates = [is_array($map) ? (string) ($map[$workflow_id] ?? '') : '', (string) get_option($this->resume_key($owner), '')];
+    foreach (array_unique(array_filter($candidates)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if ($this->session_belongs_to_request($record) && $this->record_approves($record, $workflow_id, (int) ($record['user_id'] ?? 0))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private function record_approves($record, string $workflow_id, int $user_id): bool
@@ -2547,7 +2583,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout" <?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout" <?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed attribute strings from button_attributes(). ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <input type="hidden" name="didit_session_id" id="didit_session_id" value="" />
@@ -2563,10 +2599,7 @@ final class Didit_Verify
     if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
       return;
     }
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing
-    $session_id = isset($_POST['didit_session_id'])
-      ? sanitize_text_field(wp_unslash($_POST['didit_session_id']))
-      : '';
+    $session_id = isset($_POST['didit_session_id']) ? sanitize_text_field(wp_unslash($_POST['didit_session_id'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce; the value is checked against this browser's session.
 
     if (!$this->checkout_session_is_approved($session_id)) {
       wc_add_notice(
@@ -2915,7 +2948,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout"<?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout"<?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed attribute strings from button_attributes(). ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <?php if ($is_embedded): ?>

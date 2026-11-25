@@ -297,11 +297,12 @@ final class Didit_Verify_Report
       if (!is_array($check) || empty($check['type'])) {
         continue;
       }
+      $details = self::details($check);
       $rows .= sprintf(
-        '<tr><th scope="row">%s</th><td>%s</td><td>%s</td></tr>',
+        '<tr><th scope="row">%s</th><td>%s%s</td></tr>',
         esc_html(self::check_label($check['type'])),
         self::badge((string) ($check['status'] ?? '')),
-        esc_html(self::details($check))
+        '' !== $details ? '<div class="didit-report-details">' . esc_html($details) . '</div>' : ''
       );
       foreach ((array) ($check['hits'] ?? []) as $hit) {
         $tags = array_filter([
@@ -309,11 +310,11 @@ final class Didit_Verify_Report
           !empty($hit['sanction']) ? __('sanctions', 'didit-verify') : '',
           !empty($hit['adverse_media']) ? __('adverse media', 'didit-verify') : '',
           isset($hit['match']) ? sprintf(/* translators: %s: match score. */ __('match %s', 'didit-verify'), $hit['match']) : '',
-          isset($hit['risk']) ? sprintf(/* translators: %s: risk score. */ __('risk %s', 'didit-verify'), $hit['risk']) : '',
+          isset($hit['risk']) ? sprintf(/* translators: %s: risk score. */ __('risk score %s', 'didit-verify'), $hit['risk']) : '',
           $hit['review'] ?? '',
         ]);
         $rows .= sprintf(
-          '<tr class="didit-report-hit"><td></td><td colspan="2">%s%s</td></tr>',
+          '<tr class="didit-report-hit"><td></td><td>%s%s</td></tr>',
           esc_html($hit['name'] ?? ''),
           $tags ? ' <span class="description">(' . esc_html(implode(', ', $tags)) . ')</span>' : ''
         );
