@@ -62,7 +62,7 @@
 .didit-admin .didit-workflows code { font-size: 11px; white-space: nowrap; }
 .didit-report { margin-top: 8px; }
 .didit-report-table { border-radius: 8px; table-layout: fixed; width: 100%; }
-.didit-report-table td:nth-child(2) { width: 92px; }
+.didit-report-details { margin-top: 4px; color: #333; }
 .didit-report-table th, .didit-report-table td { padding: 6px 10px; vertical-align: top; font-size: 12px; }
 .didit-report-table th { width: 28%; font-weight: 500; overflow-wrap: anywhere; }
 .didit-report-table td { overflow-wrap: anywhere; }
