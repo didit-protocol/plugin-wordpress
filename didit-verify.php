@@ -2339,7 +2339,7 @@ final class Didit_Verify
 
     if ($changed) {
       $order->update_meta_data('_didit_status', $status);
-      $order->add_order_note(sprintf(
+      Didit_Verify_Actions::add_result_note($order, sprintf(
         /* translators: 1: verification status, 2: source (browser/webhook). */
         __('Didit: verification status "%1$s" (via %2$s).', 'didit-verify'),
         $status,
@@ -2347,10 +2347,14 @@ final class Didit_Verify
       ));
     }
 
-    if ('Approved' === $status && 'verified-server' === $source && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
-      $order->delete_meta_data('_didit_held');
+    if ('Approved' === $status && 'verified-server' === $source) {
+      // Identity is resolved, but other outstanding reasons (an AML hold) keep the order on hold.
+      Didit_Verify_Actions::remove_hold_reason($order, 'identity');
       $order->save();
-      $order->update_status('processing', __('Didit: identity verified - order released.', 'didit-verify'));
+      $released = Didit_Verify_Actions::release_hold($order, __('Didit: identity verified - order released.', 'didit-verify'));
+      if (!$released && $changed && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
+        Didit_Verify_Actions::add_result_note($order, __('Didit: identity verified - the order stays on hold until the other Didit checks are resolved.', 'didit-verify'));
+      }
     } elseif ($changed) {
       $order->save();
     }
@@ -2977,26 +2981,33 @@ final class Didit_Verify
       return;
     }
     $order->update_meta_data('_didit_requires_verification', 'yes');
+    if (get_option('didit_wc_hold', false)) {
+      Didit_Verify_Actions::add_hold_reason($order, 'identity');
+    }
     $order->save();
     $this->wc_schedule_reminder($order->get_id());
   }
 
+  /**
+   * Records the identity reason when a fulfillment transition (processing or completed)
+   * happens before approval; Didit_Verify_Actions::enforce_holds() then holds the order for
+   * every outstanding reason (identity and AML). It is also hooked on its own, so AML holds
+   * apply without after-purchase verification. A hold the merchant released by hand is not
+   * re-applied for identity (`_didit_hold_released`).
+   */
   public function wc_maybe_hold_order($order_id, $from, $to, $order)
   {
-    static $holding = false;
     if (
-      $holding || 'processing' !== $to
-      || !get_option('didit_wc_hold', false) || 'after_purchase' !== $this->wc_mode()
-      || !$order->get_meta('_didit_requires_verification')
-      || 'Approved' === $this->confirmed_order_status($order)
+      in_array($to, ['processing', 'completed'], true)
+      && get_option('didit_wc_hold', false) && 'after_purchase' === $this->wc_mode()
+      && $order->get_meta('_didit_requires_verification')
+      && 'Approved' !== $this->confirmed_order_status($order)
+      && !$order->get_meta('_didit_hold_released')
     ) {
-      return;
+      Didit_Verify_Actions::add_hold_reason($order, 'identity');
+      $order->save();
     }
-    $holding = true;
-    $order->update_meta_data('_didit_held', 'yes');
-    $order->save();
-    $order->update_status('on-hold', __('Didit: order held until identity verification is approved.', 'didit-verify'));
-    $holding = false;
+    Didit_Verify_Actions::enforce_holds($order_id, $from, $to, $order);
   }
 
   public function wc_email_verification_link($order, $sent_to_admin, $plain_text, $email)
