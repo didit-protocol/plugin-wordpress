@@ -2213,7 +2213,7 @@ final class Didit_Verify
     $this->enqueue_sdk_assets();
   }
 
-  private function enqueue_sdk_assets()
+  public function enqueue_sdk_assets()
   {
     $this->enqueue_sdk_styles();
     $this->enqueue_sdk_scripts();
@@ -2418,18 +2418,19 @@ final class Didit_Verify
   public function users_column($columns)
   {
     $columns['didit_verified'] = __('Didit', 'didit-verify');
+    if (get_option('didit_business_enabled', false)) {
+      $columns['didit_kyb'] = __('Didit KYB', 'didit-verify');
+    }
     return $columns;
   }
 
   public function users_column_content($output, $column_name, $user_id)
   {
+    if ('didit_kyb' === $column_name) {
+      return $this->admin_status_badge((string) get_user_meta($user_id, '_didit_kyb_status', true));
+    }
     if ('didit_verified' !== $column_name) {
       return $output;
-    }
-    $kyb = (string) get_user_meta($user_id, '_didit_kyb_status', true);
-    if ($kyb) {
-      /* translators: %s: business verification status. */
-      $output .= $this->admin_status_badge($kyb, sprintf(__('Business (KYB): %s', 'didit-verify'), $kyb)) . ' ';
     }
     $status = $this->confirmed_user_status($user_id);
     $date = get_user_meta($user_id, '_didit_verified_at', true);
