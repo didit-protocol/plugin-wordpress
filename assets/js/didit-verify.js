@@ -48,7 +48,8 @@
       if (field) field.value = sessionId;
       return;
     }
-    if (btn.dataset.wc || btn.dataset.placement === 'checkout') {
+    // Gated pages and account tabs keep their proof on the server only.
+    if (["product_gate", "my_account", "business"].indexOf(btn.dataset.placement || "") === -1) {
       setCheckoutSession(sessionId);
     }
   }
