@@ -2904,22 +2904,33 @@ final class Didit_Verify
     $user_id = $user ? (int) $user->ID : 0;
     $removed = false;
 
-    $orders = [];
-    if (function_exists('wc_get_orders')) {
-      $orders = wc_get_orders([
-        'customer' => array_values(array_filter([$email, $user_id])),
-        'limit' => $per_page,
-        'paged' => $page,
-        'orderby' => 'ID',
-        'order' => 'ASC',
-        'type' => 'shop_order',
-      ]);
-      $orders = is_array($orders) ? $orders : [];
+    // Progress is kept between eraser pages: first the orders, 50 per page, then the
+    // stored sessions, one bounded batch per page from where the previous page stopped.
+    $state_key = 'didit_erase_' . md5(strtolower((string) $email));
+    $state = 1 === $page ? false : get_transient($state_key);
+    if (!is_array($state)) {
+      $state = ['orders_done' => false, 'order_page' => 0, 'order_ids' => [], 'cursor' => ''];
     }
-    $order_ids = [];
-    foreach ($orders as $order) {
-      $order_ids[] = (int) $order->get_id();
-      $removed = $this->erase_order_results($order) || $removed;
+
+    if (!$state['orders_done']) {
+      $orders = [];
+      if (function_exists('wc_get_orders')) {
+        $orders = wc_get_orders([
+          'customer' => array_values(array_filter([$email, $user_id])),
+          'limit' => $per_page,
+          'paged' => $state['order_page'] + 1,
+          'orderby' => 'ID',
+          'order' => 'ASC',
+          'type' => 'shop_order',
+        ]);
+        $orders = is_array($orders) ? $orders : [];
+      }
+      foreach ($orders as $order) {
+        $state['order_ids'][] = (int) $order->get_id();
+        $removed = $this->erase_order_results($order) || $removed;
+      }
+      $state['order_page']++;
+      $state['orders_done'] = count($orders) < $per_page;
     }
 
     if (1 === $page && $user_id) {
@@ -2927,15 +2938,29 @@ final class Didit_Verify
         $removed = delete_user_meta($user_id, $key) || $removed;
       }
     }
-    if ($user_id || $order_ids) {
-      $removed = $this->erase_session_records(1 === $page ? $user_id : 0, $order_ids) || $removed;
+
+    $done = false;
+    if ($state['orders_done']) {
+      if ($user_id || $state['order_ids']) {
+        $batch = $this->erase_session_records($user_id, $state['order_ids'], $state['cursor']);
+        $removed = $batch['removed'] || $removed;
+        $state['cursor'] = $batch['cursor'];
+        $done = $batch['done'];
+      } else {
+        $done = true;
+      }
+    }
+    if ($done) {
+      delete_transient($state_key);
+    } else {
+      set_transient($state_key, $state, DAY_IN_SECONDS);
     }
 
     return [
       'items_removed' => $removed,
       'items_retained' => false,
       'messages' => $removed ? [__('Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit.', 'didit-verify')] : [],
-      'done' => count($orders) < $per_page,
+      'done' => $done,
     ];
   }
 
@@ -2950,14 +2975,20 @@ final class Didit_Verify
       Didit_Verify_Sign_In::LEGACY_META, Didit_Verify_Sign_In::link_meta_key(),
     ];
     if (isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_col')) {
-      // Sign-in links are kept per site on multisite, so collect every key by prefix too.
+      // Keys of other versions are collected by prefix. Sign-in links are kept per site on
+      // multisite: only this site's link (listed above) is erased here, never another
+      // site's, which the request did not cover.
       // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- one-off lookup for a privacy erasure.
       $found = $wpdb->get_col($wpdb->prepare(
         "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key LIKE %s",
         $user_id,
         $wpdb->esc_like('_didit') . '%'
       ));
-      $keys = array_merge($keys, is_array($found) ? $found : []);
+      foreach (is_array($found) ? $found : [] as $key) {
+        if (0 !== strpos((string) $key, '_didit_auth_link_')) {
+          $keys[] = $key;
+        }
+      }
     }
     return array_values(array_unique(array_filter($keys)));
   }
@@ -3007,66 +3038,78 @@ final class Didit_Verify
   }
 
   /**
-   * Delete every stored session bound to the user or to one of the orders, including
-   * superseded attempts that no pointer leads to any more.
+   * Delete the stored sessions bound to the user or to one of the orders, including
+   * superseded attempts that no pointer leads to any more. One call reads one batch,
+   * from $cursor on, so an eraser page does bounded work on a large store.
+   *
+   * @return array{removed: bool, cursor: string, done: bool}
    */
-  private function erase_session_records(int $user_id, array $order_ids): bool
+  private function erase_session_records(int $user_id, array $order_ids, string $cursor = ''): array
   {
     global $wpdb;
+    $result = ['removed' => false, 'cursor' => $cursor, 'done' => true];
     if (!isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_results')) {
-      return false;
+      return $result;
     }
-    $removed = false;
-    $last = '';
-    do {
-      // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the session records live in options under a hashed name.
-      $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name > %s ORDER BY option_name ASC LIMIT 500",
-        $wpdb->esc_like('didit_bound_') . '%',
-        $last
-      ));
-      $rows = is_array($rows) ? $rows : [];
-      foreach ($rows as $row) {
-        $last = (string) $row->option_name;
-        $record = maybe_unserialize($row->option_value);
-        if (!is_array($record)) {
-          continue;
-        }
-        $mine = ($user_id && ((int) ($record['user_id'] ?? 0) === $user_id || (int) ($record['consumed_user_id'] ?? 0) === $user_id))
-          || ($order_ids && (in_array((int) ($record['order_id'] ?? 0), $order_ids, true) || in_array((int) ($record['consumed_order_id'] ?? 0), $order_ids, true)));
-        if ($mine) {
-          delete_option($last);
-          $this->forget_visitor_pointers($record, '');
-          $removed = true;
-        }
+    $limit = 500;
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the session records live in options under a hashed name.
+    $rows = $wpdb->get_results($wpdb->prepare(
+      "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name > %s ORDER BY option_name ASC LIMIT {$limit}",
+      $wpdb->esc_like('didit_bound_') . '%',
+      $cursor
+    ));
+    $rows = is_array($rows) ? $rows : [];
+    foreach ($rows as $row) {
+      $name = (string) $row->option_name;
+      $result['cursor'] = $name;
+      $record = maybe_unserialize($row->option_value);
+      if (!is_array($record)) {
+        continue;
       }
-    } while (500 === count($rows));
-    return $removed;
+      $mine = ($user_id && ((int) ($record['user_id'] ?? 0) === $user_id || (int) ($record['consumed_user_id'] ?? 0) === $user_id))
+        || ($order_ids && (in_array((int) ($record['order_id'] ?? 0), $order_ids, true) || in_array((int) ($record['consumed_order_id'] ?? 0), $order_ids, true)));
+      if ($mine) {
+        delete_option($name);
+        // The option name carries the session ID's hash, so only this session's pointers go.
+        $this->forget_visitor_pointers($record, substr($name, strlen('didit_bound_')));
+        $result['removed'] = true;
+      }
+    }
+    $result['done'] = count($rows) < $limit;
+    return $result;
   }
 
   private function delete_session_record(string $session_id, array $record)
   {
     delete_option($this->session_key($session_id));
-    $this->forget_visitor_pointers($record, $session_id);
+    $this->forget_visitor_pointers($record, hash('sha256', $session_id));
   }
 
-  /** Drop the browser's pointers and approvals that lead to an erased session. */
-  private function forget_visitor_pointers(array $record, string $session_id)
+  /**
+   * Drop the browser's pointers and approvals that lead to an erased session, identified
+   * by the SHA-256 of its ID. Pointers of the same browser to other sessions (another
+   * customer on a shared computer, for example) are kept.
+   */
+  private function forget_visitor_pointers(array $record, string $session_hash)
   {
     $owner = (string) ($record['owner'] ?? '');
-    if (!preg_match('/^[a-f0-9]{64}$/', $owner)) {
+    if (!preg_match('/^[a-f0-9]{64}$/', $owner) || '' === $session_hash) {
       return;
     }
-    // Without the session ID (found by scanning), the browser's pointers are dropped whole:
-    // they only ever lead to sessions of the same browser.
+    $erased = function ($id) use ($session_hash) {
+      return is_string($id) && '' !== $id && hash_equals($session_hash, hash('sha256', $id));
+    };
     foreach ([$this->resume_key($owner), $this->registration_key($owner)] as $key) {
-      if ('' === $session_id || (string) get_option($key, '') === $session_id) {
+      if ($erased(get_option($key, ''))) {
         delete_option($key);
       }
     }
     $map = get_option('didit_approved_' . $owner, []);
-    if (is_array($map)) {
-      $kept = '' === $session_id ? [] : array_filter($map, function ($id) use ($session_id) { return $id !== $session_id; });
+    if (is_array($map) && $map) {
+      $kept = array_filter($map, function ($id) use ($erased) { return !$erased($id); });
+      if ($kept === $map) {
+        return;
+      }
       if ($kept) {
         update_option('didit_approved_' . $owner, $kept, false);
       } else {
