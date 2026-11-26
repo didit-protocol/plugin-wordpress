@@ -917,6 +917,16 @@ final class Didit_Verify
 
   public function rest_check_permission($request)
   {
+    return $this->check_permission($request, $request->get_json_params());
+  }
+
+  /**
+   * The nonce, order and login checks shared by both endpoints. $placement_input decides
+   * the guest exception: the request itself when a session is created, the stored
+   * session record when one is confirmed.
+   */
+  private function check_permission($request, $placement_input)
+  {
     $nonce = $request->get_header('x_wp_nonce');
     if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
       return new WP_Error('rest_forbidden', __('Invalid security token.', 'didit-verify'), ['status' => 403]);
@@ -928,7 +938,7 @@ final class Didit_Verify
 
     if (get_option('didit_require_login', true) && !is_user_logged_in()
       && !('checkout' === $this->wc_mode() && $this->wc_cart_requires_verification())
-      && !Didit_Verify_Placements::guest_may_start($request->get_json_params())) {
+      && !Didit_Verify_Placements::guest_may_start($placement_input)) {
       return new WP_Error('rest_forbidden', __('You must be logged in to start verification.', 'didit-verify'), ['status' => 401]);
     }
 
@@ -937,23 +947,16 @@ final class Didit_Verify
 
   /**
    * Confirming a result names only the session. A visitor without an account may
-   * confirm a session this browser started for a placement open to guests, judged by
-   * the placement stored with the session, never by what the request claims.
+   * confirm a session this browser started for a placement open to guests, judged only
+   * by the placement stored with the session: a placement named in the request is ignored.
    */
   public function rest_check_verify_permission($request)
   {
-    $allowed = $this->rest_check_permission($request);
-    if (true === $allowed || !is_wp_error($allowed) || 401 !== (int) ($allowed->get_error_data()['status'] ?? 0)) {
-      return $allowed;
-    }
     $input = $request->get_json_params();
     $session_id = is_array($input) && is_string($input['sessionId'] ?? null) ? $input['sessionId'] : '';
-    $record = $this->stored_session($session_id);
-    if ($this->session_belongs_to_request($record)
-      && Didit_Verify_Placements::guest_may_start(['placement' => (string) ($record['placement'] ?? '')])) {
-      return true;
-    }
-    return $allowed;
+    $record = $this->valid_session_id($session_id) ? $this->stored_session($session_id) : null;
+    $placement = $this->session_belongs_to_request($record) ? (string) ($record['placement'] ?? '') : '';
+    return $this->check_permission($request, ['placement' => $placement]);
   }
 
   private function validate_order_context($input)
