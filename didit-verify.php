@@ -3,7 +3,7 @@
  * Plugin Name: Didit Verify
  * Plugin URI:  https://github.com/didit-protocol/plugin-wordpress
  * Description: Identity verification for WordPress & WooCommerce using the Didit SDK.
- * Version:     0.3.5
+ * Version:     0.4.0
  * Author:      Didit
  * Author URI:  https://didit.me
  * License:     GPL-2.0-or-later
@@ -18,9 +18,17 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('DIDIT_VERIFY_VERSION', '0.3.5');
+define('DIDIT_VERIFY_VERSION', '0.4.0');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
+
+require_once __DIR__ . '/includes/class-didit-lock.php';
+require_once __DIR__ . '/includes/class-didit-api.php';
+require_once __DIR__ . '/includes/class-didit-workflows.php';
+require_once __DIR__ . '/includes/class-didit-report.php';
+require_once __DIR__ . '/includes/class-didit-placements.php';
+require_once __DIR__ . '/includes/class-didit-actions.php';
+require_once __DIR__ . '/includes/class-didit-sign-in.php';
 
 final class Didit_Verify
 {
@@ -58,11 +66,21 @@ final class Didit_Verify
     add_shortcode('didit_gate', [$this, 'render_gate_shortcode']);
 
     add_action('woocommerce_loaded', [$this, 'wc_hooks']);
+
+    add_filter('wp_privacy_personal_data_erasers', [$this, 'register_eraser']);
+    add_action('show_user_profile', [$this, 'user_profile_report']);
+    add_action('edit_user_profile', [$this, 'user_profile_report']);
+
+    Didit_Verify_Workflows::hooks();
+    Didit_Verify_Placements::init($this);
+    Didit_Verify_Actions::init($this);
+    Didit_Verify_Sign_In::init();
   }
 
   public function load_textdomain()
   {
-    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    // Loads the German translations bundled in languages/; WordPress.org language packs still take precedence.
+    load_plugin_textdomain('didit-verify', false, dirname(plugin_basename(__FILE__)) . '/languages'); // phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound
   }
 
   public function admin_menu()
@@ -128,6 +146,22 @@ final class Didit_Verify
       'didit_btn_padding_v' => ['sanitize_callback' => 'absint', 'default' => 12],
       'didit_btn_padding_h' => ['sanitize_callback' => 'absint', 'default' => 24],
       'didit_btn_font_size' => ['sanitize_callback' => 'absint', 'default' => 16],
+      'didit_console_url' => ['sanitize_callback' => 'esc_url_raw', 'default' => ''],
+      Didit_Verify_Workflows::OPTION => ['sanitize_callback' => [Didit_Verify_Workflows::class, 'sanitize_map'], 'default' => []],
+      'didit_registration_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_gate_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_my_account_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_business_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_gate_categories' => ['sanitize_callback' => [Didit_Verify_Placements::class, 'sanitize_categories'], 'default' => []],
+      'didit_aml_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_aml_threshold' => ['sanitize_callback' => [Didit_Verify_Actions::class, 'sanitize_amount'], 'default' => 0],
+      'didit_aml_monitoring' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_aml_hold' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_contact_phone' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_contact_email' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_signin_enabled' => ['sanitize_callback' => 'rest_sanitize_boolean', 'default' => false],
+      'didit_signin_publishable_key' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
+      'didit_signin_application_id' => ['sanitize_callback' => 'sanitize_text_field', 'default' => ''],
     ];
 
     foreach ($fields as $name => $args) {
@@ -139,6 +173,19 @@ final class Didit_Verify
     add_settings_field('didit_unilink_url', __('UniLink URL', 'didit-verify'), [$this, 'field_unilink'], 'didit-verify', 'didit_connection');
     add_settings_field('didit_workflow_id', __('Workflow ID', 'didit-verify'), [$this, 'field_workflow_id'], 'didit-verify', 'didit_connection');
     add_settings_field('didit_api_key', __('API Key', 'didit-verify'), [$this, 'field_api_key'], 'didit-verify', 'didit_connection');
+
+    add_settings_section('didit_placements_section', __('Workflows and placements', 'didit-verify'), '__return_false', 'didit-verify');
+    add_settings_field('didit_workflows', __('Your workflows', 'didit-verify'), [Didit_Verify_Workflows::class, 'render_catalogue'], 'didit-verify', 'didit_placements_section');
+    add_settings_field('didit_placements', __('Placements', 'didit-verify'), [Didit_Verify_Workflows::class, 'render_placements'], 'didit-verify', 'didit_placements_section');
+    add_settings_field('didit_gate_categories', __('Age-restricted categories', 'didit-verify'), [Didit_Verify_Placements::class, 'field_gate_categories'], 'didit-verify', 'didit_placements_section');
+    add_settings_field('didit_console_url', __('Console link', 'didit-verify'), [$this, 'field_console_url'], 'didit-verify', 'didit_placements_section');
+
+    add_settings_section('didit_actions', __('Direct checks', 'didit-verify'), '__return_false', 'didit-verify');
+    add_settings_field('didit_aml_enabled', __('AML screening at checkout', 'didit-verify'), [Didit_Verify_Actions::class, 'field_aml'], 'didit-verify', 'didit_actions');
+    add_settings_field('didit_contact_checks', __('Phone and email', 'didit-verify'), [Didit_Verify_Actions::class, 'field_contact'], 'didit-verify', 'didit_actions');
+
+    add_settings_section('didit_signin', __('Sign in with Didit', 'didit-verify'), '__return_false', 'didit-verify');
+    add_settings_field('didit_signin_enabled', __('Sign-in', 'didit-verify'), [Didit_Verify_Sign_In::class, 'field_settings'], 'didit-verify', 'didit_signin');
 
     add_settings_section('didit_session', __('Session Options (API mode)', 'didit-verify'), '__return_false', 'didit-verify');
     add_settings_field('didit_vendor_data_mode', __('Vendor Data', 'didit-verify'), [$this, 'field_vendor_data'], 'didit-verify', 'didit_session');
@@ -180,7 +227,7 @@ final class Didit_Verify
 
   public function admin_enqueue_scripts($hook)
   {
-    if (in_array($hook, ['settings_page_didit-verify', 'users.php', 'post.php', 'post-new.php', 'woocommerce_page_wc-orders'], true)) {
+    if (in_array($hook, ['settings_page_didit-verify', 'users.php', 'profile.php', 'user-edit.php', 'post.php', 'post-new.php', 'woocommerce_page_wc-orders'], true)) {
       wp_enqueue_style('didit-admin', DIDIT_VERIFY_URL . 'assets/css/didit-admin.css', [], DIDIT_VERIFY_VERSION);
     }
     if ('settings_page_didit-verify' !== $hook) {
@@ -239,6 +286,16 @@ final class Didit_Verify
 			<p class="description">%s</p>',
       esc_attr(get_option('didit_api_key', '')),
       esc_html__('Found in Didit Console → API & Webhooks. Used by your WordPress server to create and confirm sessions. Keep it private.', 'didit-verify')
+    );
+  }
+
+  public function field_console_url()
+  {
+    printf(
+      '<input type="url" name="didit_console_url" value="%s" class="large-text" placeholder="https://business.didit.me/console/…" />
+      <p class="description">%s</p>',
+      esc_attr(get_option('didit_console_url', '')),
+      esc_html__('Paste the address of any page of this application in the Didit Console. Orders and user profiles then link straight to each verification. Without it, the link opens the console home.', 'didit-verify')
     );
   }
 
@@ -848,7 +905,7 @@ final class Didit_Verify
     register_rest_route('didit/v1', '/verify', [
       'methods' => 'POST',
       'callback' => [$this, 'rest_save_verification'],
-      'permission_callback' => [$this, 'rest_check_permission'],
+      'permission_callback' => [$this, 'rest_check_verify_permission'],
     ]);
 
     register_rest_route('didit/v1', '/webhook', [
@@ -860,6 +917,16 @@ final class Didit_Verify
 
   public function rest_check_permission($request)
   {
+    return $this->check_permission($request, $request->get_json_params());
+  }
+
+  /**
+   * The nonce, order and login checks shared by both endpoints. $placement_input decides
+   * the guest exception: the request itself when a session is created, the stored
+   * session record when one is confirmed.
+   */
+  private function check_permission($request, $placement_input)
+  {
     $nonce = $request->get_header('x_wp_nonce');
     if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
       return new WP_Error('rest_forbidden', __('Invalid security token.', 'didit-verify'), ['status' => 403]);
@@ -870,11 +937,26 @@ final class Didit_Verify
     }
 
     if (get_option('didit_require_login', true) && !is_user_logged_in()
-      && !('checkout' === $this->wc_mode() && $this->wc_cart_requires_verification())) {
+      && !('checkout' === $this->wc_mode() && $this->wc_cart_requires_verification())
+      && !Didit_Verify_Placements::guest_may_start($placement_input)) {
       return new WP_Error('rest_forbidden', __('You must be logged in to start verification.', 'didit-verify'), ['status' => 401]);
     }
 
     return true;
+  }
+
+  /**
+   * Confirming a result names only the session. A visitor without an account may
+   * confirm a session this browser started for a placement open to guests, judged only
+   * by the placement stored with the session: a placement named in the request is ignored.
+   */
+  public function rest_check_verify_permission($request)
+  {
+    $input = $request->get_json_params();
+    $session_id = is_array($input) && is_string($input['sessionId'] ?? null) ? $input['sessionId'] : '';
+    $record = $this->valid_session_id($session_id) ? $this->stored_session($session_id) : null;
+    $placement = $this->session_belongs_to_request($record) ? (string) ($record['placement'] ?? '') : '';
+    return $this->check_permission($request, ['placement' => $placement]);
   }
 
   private function validate_order_context($input)
@@ -894,14 +976,133 @@ final class Didit_Verify
     return $order;
   }
 
+  /**
+   * The placement a session request is for. The browser names a placement, never a
+   * workflow; unknown or switched-off placements are refused.
+   *
+   * @return string|WP_Error
+   */
+  private function request_placement($input, $order = null)
+  {
+    if ($order) {
+      return 'checkout';
+    }
+    $placement = is_array($input) && isset($input['placement']) && is_string($input['placement']) ? $input['placement'] : 'default';
+    if (!Didit_Verify_Workflows::is_placement($placement)) {
+      return new WP_Error('didit_unknown_placement', __('This verification is not available.', 'didit-verify'), ['status' => 400]);
+    }
+    if (!Didit_Verify_Workflows::is_enabled($placement)) {
+      return new WP_Error('didit_placement_disabled', __('This verification is not available.', 'didit-verify'), ['status' => 403]);
+    }
+    if (in_array($placement, ['my_account', 'business'], true) && !is_user_logged_in()) {
+      return new WP_Error('rest_forbidden', __('You must be logged in to start verification.', 'didit-verify'), ['status' => 401]);
+    }
+    return $placement;
+  }
+
+  /**
+   * The workflow a stored session ran, or '' when it is not known. Sessions created
+   * before 0.4.0 did not record it, and the current default Workflow ID says nothing
+   * about which workflow they passed: see session_workflow().
+   */
+  public function record_workflow($record): string
+  {
+    return is_array($record) && !empty($record['workflow_id']) ? (string) $record['workflow_id'] : '';
+  }
+
+  /**
+   * The workflow of a session, recovered from Didit's decision for a session created
+   * before 0.4.0 and remembered on the record. When Didit cannot say, the session
+   * counts for no workflow and the person verifies again.
+   */
+  public function session_workflow(string $session_id, $record): string
+  {
+    $workflow_id = $this->record_workflow($record);
+    if ('' !== $workflow_id || !is_array($record)) {
+      return $workflow_id;
+    }
+    // Look up only approvals, and at most once an hour per session.
+    if ('Approved' !== $this->normalize_status($record['status'] ?? '') || (int) ($record['workflow_lookup_at'] ?? 0) > time() - HOUR_IN_SECONDS) {
+      return '';
+    }
+    $decision = $this->fetch_decision($session_id);
+    $record['workflow_lookup_at'] = time();
+    if (is_wp_error($decision)) {
+      $this->store_session($session_id, $record);
+      return '';
+    }
+    // Record what Didit decides now, status and subject kind included, before the
+    // migrated session is judged: an approval Didit has since declined grants nothing.
+    $record = $this->with_decision_facts($record, $decision);
+    $this->apply_confirmed_status($session_id, $record, $decision['status'], time(), Didit_Verify_Report::summarize($decision));
+    return $this->record_workflow($this->stored_session($session_id));
+  }
+
+  /**
+   * Copy what the confirmed decision says about the session itself onto its record:
+   * the workflow it ran (sessions before 0.4.0 did not record it) and whether it
+   * verified a person or a business.
+   */
+  public function with_decision_facts(array $record, array $decision): array
+  {
+    $workflow_id = isset($decision['workflow_id']) && is_string($decision['workflow_id']) ? sanitize_text_field($decision['workflow_id']) : '';
+    if (empty($record['workflow_id']) && '' !== $workflow_id) {
+      $record['workflow_id'] = $workflow_id;
+    }
+    $kind = isset($decision['session_kind']) && is_string($decision['session_kind']) ? strtolower($decision['session_kind']) : '';
+    if (in_array($kind, ['user', 'business'], true)) {
+      $record['session_kind'] = $kind;
+    }
+    return $record;
+  }
+
+  /**
+   * Whether the session verified the kind of subject a placement is for: a company for
+   * business customers, a person everywhere else. $placement is the placement that uses
+   * the approval (by default the one that started the session), so a company approval
+   * never satisfies a personal check that shares its workflow, nor the reverse.
+   *
+   * Only the kind Didit confirmed in a decision grants anything. With $confirmed false,
+   * an open session not decided yet is judged by the workflow's type in the catalogue,
+   * which is enough to show its progress but never to grant access.
+   */
+  public function record_kind_matches($record, string $placement = '', bool $confirmed = true): bool
+  {
+    if (!is_array($record)) {
+      return false;
+    }
+    $placement = '' !== $placement ? $placement : (string) ($record['placement'] ?? '');
+    $expected = 'business' === $placement ? 'business' : 'user';
+    $kind = (string) ($record['session_kind'] ?? '');
+    if ('' === $kind) {
+      if ($confirmed) {
+        return false;
+      }
+      $type = Didit_Verify_Workflows::type_of($this->record_workflow($record));
+      $kind = '' === $type ? $expected : ('kyb' === $type ? 'business' : 'user');
+    }
+    return $kind === $expected;
+  }
+
+  /** What a Didit status grants for a placement: an approval of the wrong kind of subject declines. */
+  public function grant_status($record, string $status, string $placement = ''): string
+  {
+    return 'Approved' === $status && !$this->record_kind_matches($record, $placement) ? 'Declined' : $status;
+  }
+
   public function rest_create_session($request)
   {
     $input = $request->get_json_params();
     $order = $this->validate_order_context($input);
+    $placement = $this->request_placement($input, $order);
+    if (is_wp_error($placement)) {
+      return $placement;
+    }
+    $workflow_id = Didit_Verify_Workflows::workflow_for($placement);
 
     // Continuing the session this browser or order already has costs nothing, so a retry
     // must not spend the visitor's creation budget or leave a duplicate session behind.
-    $resume = $this->resumable_session($order);
+    $resume = $this->resumable_session($order, $workflow_id, $placement);
     if ($resume) {
       return rest_ensure_response($resume);
     }
@@ -911,7 +1112,6 @@ final class Didit_Verify
       return $rate_error;
     }
 
-    $workflow_id = get_option('didit_workflow_id');
     $api_key = get_option('didit_api_key');
 
     if (empty($workflow_id) || empty($api_key)) {
@@ -1055,10 +1255,24 @@ final class Didit_Verify
       'event_timestamp' => 0,
       'consumed_order_id' => 0,
       'url' => esc_url_raw($url),
+      'placement' => $placement,
+      'workflow_id' => $workflow_id,
     ]);
     update_option($this->resume_key($owner), $session_id, false);
+    if ('registration' === $placement) {
+      // Kept apart from the resume pointer, which a later checkout session replaces, so
+      // an account created at checkout can still find this browser's registration check.
+      update_option($this->registration_key($owner), $session_id, false);
+    }
     if ($user_id) {
-      update_user_meta($user_id, '_didit_pending_session_id', $session_id);
+      // A business check never stands in for the person's own identity check.
+      update_user_meta($user_id, 'business' === $placement ? '_didit_kyb_pending_session_id' : '_didit_pending_session_id', $session_id);
+      // The account's latest session per placement, so "Continue verification" reopens
+      // the session waiting for this customer even after they started another check.
+      $by_placement = get_user_meta($user_id, '_didit_placement_sessions', true);
+      $by_placement = is_array($by_placement) ? $by_placement : [];
+      $by_placement[$placement] = $session_id;
+      update_user_meta($user_id, '_didit_placement_sessions', $by_placement);
     }
 
     if ($order) {
@@ -1067,7 +1281,7 @@ final class Didit_Verify
       if (!$this->confirmed_order_status($order)) {
         $order->update_meta_data('_didit_status', 'Not Started');
       }
-      $order->add_order_note(sprintf(
+      Didit_Verify_Actions::add_result_note($order, sprintf(
         /* translators: %s: Didit session id. */
         __('Didit: verification session created (%s).', 'didit-verify'),
         sanitize_text_field($data['session_id'] ?? '')
@@ -1095,41 +1309,53 @@ final class Didit_Verify
     return $url;
   }
 
-  private function valid_session_id($session_id): bool
+  public function valid_session_id($session_id): bool
   {
     return is_string($session_id) && 1 === preg_match('/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i', $session_id);
   }
 
-  private function session_key($session_id): string
+  public function session_key($session_id): string
   {
     return 'didit_bound_' . hash('sha256', $session_id);
   }
 
-  private function stored_session($session_id)
+  public function stored_session($session_id)
   {
     return $this->valid_session_id($session_id) ? get_option($this->session_key($session_id), false) : false;
   }
 
-  private function store_session($session_id, array $record)
+  public function store_session($session_id, array $record)
   {
     update_option($this->session_key($session_id), $record, false);
   }
 
-  private function resume_key(string $owner): string
+  public function resume_key(string $owner): string
   {
     return 'didit_resume_' . $owner;
   }
 
+  public function registration_key(string $owner): string
+  {
+    return 'didit_registration_' . $owner;
+  }
+
+  /** The registration session this browser started last, if any. */
+  public function visitor_registration_session(): string
+  {
+    $owner = $this->verification_owner();
+    return '' === $owner ? '' : (string) get_option($this->registration_key($owner), '');
+  }
+
   private function status_is_open(string $status): bool
   {
-    return in_array($this->normalize_status($status), ['Not Started', 'In Progress', 'In Review'], true);
+    return in_array($this->normalize_status($status), ['Not Started', 'In Progress', 'Awaiting User', 'In Review', 'Resubmitted'], true);
   }
 
   /**
    * The session this visitor can continue, if any. A retry returns it instead of
    * creating another session, which is what kept Android shoppers locked out.
    */
-  private function resumable_session($order = null)
+  private function resumable_session($order = null, string $workflow_id = '', string $placement = '')
   {
     $candidates = [];
     $owner = $this->verification_owner();
@@ -1138,11 +1364,25 @@ final class Didit_Verify
     }
     if ($order) {
       $candidates[] = (string) $order->get_meta('_didit_session_id');
+    } elseif ('' !== $placement && is_user_logged_in()) {
+      $by_placement = get_user_meta(get_current_user_id(), '_didit_placement_sessions', true);
+      $candidates[] = is_array($by_placement) ? (string) ($by_placement[$placement] ?? '') : '';
     }
 
     foreach (array_unique(array_filter($candidates)) as $session_id) {
       $record = $this->stored_session($session_id);
-      if (!is_array($record) || !$this->session_belongs_to_request($record, $order) || !$this->status_is_open((string) ($record['status'] ?? ''))) {
+      if (!is_array($record) || !$this->status_is_open((string) ($record['status'] ?? ''))) {
+        continue;
+      }
+      if (!$this->session_belongs_to_request($record, $order)) {
+        continue;
+      }
+      // A session of another workflow cannot finish this placement's check, and one
+      // started for another placement would be refused by it even after approval.
+      if ('' !== $workflow_id && $this->record_workflow($record) !== $workflow_id) {
+        continue;
+      }
+      if ('' !== $placement && (string) ($record['placement'] ?? '') !== $placement) {
         continue;
       }
       // A guest session carries no account, so after logging in the visitor needs one that does.
@@ -1158,12 +1398,13 @@ final class Didit_Verify
       }
       // The stored status only moves when a webhook arrives, so ask Didit before reopening:
       // an abandoned or expired session would otherwise be handed back on every retry.
-      $status = $this->fetch_decision_status($session_id);
-      if (is_wp_error($status)) {
+      $decision = $this->fetch_decision($session_id);
+      if (is_wp_error($decision)) {
         continue;
       }
+      $status = $decision['status'];
       if (!$this->status_is_open($status)) {
-        $this->apply_confirmed_status($session_id, $record, $status, time());
+        $this->apply_confirmed_status($session_id, $this->with_decision_facts($record, $decision), $status, time(), Didit_Verify_Report::summarize($decision));
         continue;
       }
       return ['url' => $url, 'sessionId' => $session_id];
@@ -1172,9 +1413,9 @@ final class Didit_Verify
     return null;
   }
 
-  private function verification_owner(bool $create = false): string
+  public function verification_owner(bool $create = false): string
   {
-    $cookie = $_COOKIE['didit_verification_owner'] ?? '';
+    $cookie = isset($_COOKIE['didit_verification_owner']) ? sanitize_text_field(wp_unslash($_COOKIE['didit_verification_owner'])) : '';
     if (!is_string($cookie) || !preg_match('/^[a-f0-9]{64}$/', $cookie)) {
       if (!$create) {
         return '';
@@ -1192,7 +1433,7 @@ final class Didit_Verify
     return hash('sha256', $cookie);
   }
 
-  private function session_belongs_to_request($record, $order = null): bool
+  public function session_belongs_to_request($record, $order = null): bool
   {
     if (!is_array($record)) {
       return false;
@@ -1205,12 +1446,12 @@ final class Didit_Verify
       && hash_equals($record['owner'], $this->verification_owner());
   }
 
-  private function normalize_status($status): string
+  public function normalize_status($status): string
   {
     if (!is_string($status)) {
       return '';
     }
-    foreach (['Not Started', 'In Progress', 'In Review', 'Approved', 'Declined', 'Abandoned', 'Expired', 'KYC Expired'] as $known) {
+    foreach (['Not Started', 'In Progress', 'Awaiting User', 'In Review', 'Resubmitted', 'Approved', 'Declined', 'Abandoned', 'Expired', 'KYC Expired'] as $known) {
       if (strtolower(str_replace('_', ' ', $status)) === strtolower($known)) {
         return $known;
       }
@@ -1218,24 +1459,40 @@ final class Didit_Verify
     return '';
   }
 
-  private function confirm_session($session_id, $order = null)
+  public function confirm_session($session_id, $order = null)
   {
     $record = $this->stored_session($session_id);
     if (!$this->session_belongs_to_request($record, $order)) {
       return new WP_Error('didit_session_mismatch', __('Start a new verification from this page.', 'didit-verify'), ['status' => 403]);
     }
-    $status = $this->fetch_decision_status($session_id);
-    if (is_wp_error($status)) {
-      return $status;
+    $decision = $this->fetch_decision($session_id);
+    if (is_wp_error($decision)) {
+      return $decision;
     }
-    $this->apply_confirmed_status($session_id, $record, $status, time());
-    return $status;
+    $record = $this->with_decision_facts($record, $decision);
+    if (!$this->apply_confirmed_status($session_id, $record, $decision['status'], time(), Didit_Verify_Report::summarize($decision))) {
+      return new WP_Error('didit_confirmation_busy', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 503]);
+    }
+    // What the session grants for its own placement, never the raw status: a company
+    // approval of a registration workflow creates no account.
+    return $this->grant_status($this->stored_session($session_id), $decision['status']);
   }
 
   /**
    * The status Didit currently holds for a session, read from the decision endpoint.
    */
   private function fetch_decision_status($session_id)
+  {
+    $decision = $this->fetch_decision($session_id);
+    return is_wp_error($decision) ? $decision : $decision['status'];
+  }
+
+  /**
+   * The decision Didit currently holds for a session, with `status` normalized.
+   *
+   * @return array|WP_Error
+   */
+  public function fetch_decision($session_id)
   {
     $api_key = get_option('didit_api_key', '');
     if (!$api_key) {
@@ -1249,49 +1506,264 @@ final class Didit_Verify
       return new WP_Error('didit_confirmation_unavailable', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 503]);
     }
     $data = json_decode(wp_remote_retrieve_body($response), true);
-    $status = $this->normalize_status($data['status'] ?? '');
+    $status = $this->normalize_status(is_array($data) ? ($data['status'] ?? '') : '');
     if (!$status || ($data['session_id'] ?? '') !== $session_id) {
       return new WP_Error('didit_invalid_decision', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 502]);
     }
-    return $status;
+    $data['status'] = $status;
+    return $data;
   }
 
-  private function apply_confirmed_status($session_id, array $record, string $status, int $timestamp)
+  /**
+   * Record a decision Didit confirmed, on the session, its user and its order.
+   *
+   * Browser confirmation and the webhook can arrive together, so the transition is made
+   * under a per-session lock against the record as stored now, not as each request read
+   * it before calling Didit: only the request that changes the status fires the hooks.
+   *
+   * @param array|null $report Didit_Verify_Report summary of the decision, when fetched.
+   * @return bool false when the session stayed locked and nothing was recorded.
+   */
+  public function apply_confirmed_status($session_id, array $record, string $status, int $timestamp, $report = null): bool
   {
-    if ($timestamp < (int) ($record['event_timestamp'] ?? 0)) {
+    $lock = 'didit_session_lock_' . substr(hash('sha256', (string) $session_id), 0, 32);
+    $token = Didit_Verify_Lock::acquire($lock, 30);
+    if ('' === $token) {
+      return false;
+    }
+    $this->apply_status_locked((string) $session_id, $record, $status, $timestamp, $report);
+    Didit_Verify_Lock::release($lock, $token);
+    return true;
+  }
+
+  private function apply_status_locked(string $session_id, array $record, string $status, int $timestamp, $report)
+  {
+    $stored = $this->stored_session($session_id);
+    if (is_array($stored)) {
+      // Facts the caller just read from the decision join the stored record.
+      foreach (['workflow_id', 'session_kind', 'workflow_lookup_at'] as $fact) {
+        if (!empty($record[$fact])) {
+          $stored[$fact] = $record[$fact];
+        }
+      }
+      $record = $stored;
+    }
+    $previous = (int) ($record['event_timestamp'] ?? 0);
+    if ($timestamp < $previous) {
       return;
     }
+    // Completion hooks fire when the decision moves into a final status, not when a
+    // replayed delivery or a later data.updated refresh repeats the same decision.
+    $transition = $status !== (string) ($record['status'] ?? '');
     $record['status'] = $status;
     $record['event_timestamp'] = $timestamp;
+    if (is_array($report)) {
+      $record['report'] = $report;
+    }
     $this->store_session($session_id, $record);
     $user_id = (int) $record['user_id'];
-    // A new attempt must not prevent revocation of the session still granting access.
-    if ($user_id && (
+    // A decision about the wrong kind of subject (a company where a person was asked
+    // for, or the reverse) grants nothing; it can still revoke what this session granted.
+    $grant_status = $this->grant_status($record, $status);
+    if ($user_id) {
+      $this->remember_workflow_session($user_id, $this->record_workflow($record), $session_id);
+    }
+    if ($user_id && 'business' === ($record['placement'] ?? '')) {
+      if (
+        (string) get_user_meta($user_id, '_didit_kyb_pending_session_id', true) === $session_id
+        || (string) get_user_meta($user_id, '_didit_kyb_session_id', true) === $session_id
+      ) {
+        update_user_meta($user_id, '_didit_kyb_session_id', $session_id);
+        update_user_meta($user_id, '_didit_kyb_status', $grant_status);
+        update_user_meta($user_id, '_didit_kyb_verified_at', current_time('mysql'));
+        if (is_array($report)) {
+          update_user_meta($user_id, '_didit_kyb_report', $report);
+        }
+      }
+    } elseif ($user_id && (
+      // A new attempt must not prevent revocation of the session still granting access.
       (string) get_user_meta($user_id, '_didit_pending_session_id', true) === $session_id
       || (string) get_user_meta($user_id, '_didit_confirmed_session_id', true) === $session_id
     )) {
       update_user_meta($user_id, '_didit_session_id', $session_id);
       update_user_meta($user_id, '_didit_confirmed_session_id', $session_id);
-      update_user_meta($user_id, '_didit_status', $status);
+      update_user_meta($user_id, '_didit_status', $grant_status);
       update_user_meta($user_id, '_didit_verified_at', current_time('mysql'));
-      if ('Approved' === $status) {
+      if ('Approved' === $grant_status) {
         update_user_meta($user_id, '_didit_verified', 1);
       } else {
         delete_user_meta($user_id, '_didit_verified');
       }
+      if (is_array($report)) {
+        update_user_meta($user_id, Didit_Verify_Report::META, $report);
+      }
+    }
+    if ($user_id) {
+      $this->update_workflow_approval($user_id, $this->record_workflow($record), $session_id, $grant_status);
+    }
+    if (!empty($record['owner']) && is_string($record['owner'])) {
+      $this->update_visitor_approval($record['owner'], $this->record_workflow($record), $session_id, $grant_status);
     }
     if (!empty($record['order_id']) && function_exists('wc_get_order')) {
       $order = wc_get_order($record['order_id']);
       if ($order && (string) $order->get_meta('_didit_session_id') === $session_id) {
-        $this->wc_apply_verification_to_order($order, $status, 'verified-server');
+        if (is_array($report)) {
+          $order->update_meta_data(Didit_Verify_Report::META, $report);
+          $order->save();
+        }
+        $this->wc_apply_verification_to_order($order, $grant_status, 'verified-server');
       }
     }
-    if (in_array($status, ['Approved', 'Declined'], true)) {
-      do_action('didit_verification_completed', $user_id, $session_id, $status);
+    if ($transition && in_array($grant_status, ['Approved', 'Declined'], true)) {
+      do_action('didit_verification_completed', $user_id, $session_id, $grant_status);
     }
   }
 
-  private function confirmed_user_status($user_id): string
+  /** The user's latest session of each workflow, so each gate reads the status of its own workflow. */
+  private function remember_workflow_session(int $user_id, string $workflow_id, string $session_id)
+  {
+    if ('' === $workflow_id) {
+      return;
+    }
+    $map = get_user_meta($user_id, '_didit_workflow_sessions', true);
+    $map = is_array($map) ? $map : [];
+    if (($map[$workflow_id] ?? '') !== $session_id) {
+      $map[$workflow_id] = $session_id;
+      update_user_meta($user_id, '_didit_workflow_sessions', $map);
+    }
+  }
+
+  /**
+   * The user's status for one workflow: Approved while a confirmed approval of that
+   * workflow stands, otherwise the status of their latest session of it ('' if none).
+   * An approval of another workflow, such as an age check, says nothing here.
+   */
+  public function user_workflow_status(int $user_id, string $workflow_id, string $placement = 'default'): string
+  {
+    if (!$user_id || '' === $workflow_id) {
+      return '';
+    }
+    if ($this->user_has_workflow_approval($user_id, $workflow_id, $placement)) {
+      return 'Approved';
+    }
+    $map = get_user_meta($user_id, '_didit_workflow_sessions', true);
+    $session_id = is_array($map) ? (string) ($map[$workflow_id] ?? '') : '';
+    $record = $session_id ? $this->stored_session($session_id) : false;
+    if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== $user_id) {
+      return '';
+    }
+    $status = $this->normalize_status($record['status'] ?? '');
+    return 'Approved' === $status || !$this->record_kind_matches($record, $placement, false) ? '' : $status;
+  }
+
+  /**
+   * Keep the user's approval per workflow, so an approval only opens the gates of the
+   * workflow that produced it. A revocation removes the entry it granted.
+   */
+  private function update_workflow_approval(int $user_id, string $workflow_id, string $session_id, string $status)
+  {
+    if ('' === $workflow_id) {
+      return;
+    }
+    $map = get_user_meta($user_id, '_didit_approved_workflows', true);
+    $map = is_array($map) ? $map : [];
+    if ('Approved' === $status) {
+      $map[$workflow_id] = $session_id;
+    } elseif (($map[$workflow_id] ?? '') === $session_id) {
+      unset($map[$workflow_id]);
+    } else {
+      return;
+    }
+    if ($map) {
+      update_user_meta($user_id, '_didit_approved_workflows', $map);
+    } else {
+      delete_user_meta($user_id, '_didit_approved_workflows');
+    }
+  }
+
+  /**
+   * The same per-workflow approvals for the browser that verified, so a visitor without
+   * an account keeps an age approval while starting another check, such as checkout.
+   */
+  private function update_visitor_approval(string $owner, string $workflow_id, string $session_id, string $status)
+  {
+    if ('' === $workflow_id || !preg_match('/^[a-f0-9]{64}$/', $owner)) {
+      return;
+    }
+    $key = 'didit_approved_' . $owner;
+    $map = get_option($key, []);
+    $map = is_array($map) ? $map : [];
+    if ('Approved' === $status) {
+      $map[$workflow_id] = $session_id;
+    } elseif (($map[$workflow_id] ?? '') === $session_id) {
+      unset($map[$workflow_id]);
+    } else {
+      return;
+    }
+    if ($map) {
+      update_option($key, $map, false);
+    } else {
+      delete_option($key);
+    }
+  }
+
+  /** Whether a confirmed Didit decision of this workflow currently approves the user. */
+  /**
+   * Whether a confirmed Didit decision of this workflow currently approves the user, for
+   * the placement that asks ($placement decides whether a person or a company is needed).
+   */
+  public function user_has_workflow_approval(int $user_id, string $workflow_id, string $placement = 'default'): bool
+  {
+    if (!$user_id || '' === $workflow_id) {
+      return false;
+    }
+    $map = get_user_meta($user_id, '_didit_approved_workflows', true);
+    $session_id = is_array($map) ? (string) ($map[$workflow_id] ?? '') : '';
+    if ($session_id && $this->record_approves($session_id, $this->stored_session($session_id), $workflow_id, $user_id, $placement)) {
+      return true;
+    }
+    // Approvals recorded before 0.4.0 count for the workflow Didit says they ran.
+    $legacy = (string) get_user_meta($user_id, '_didit_confirmed_session_id', true);
+    return $legacy && $this->record_approves($legacy, $this->stored_session($legacy), $workflow_id, $user_id, $placement)
+      && $this->is_user_verified($user_id);
+  }
+
+  /** Whether this browser holds an approval of the workflow, for visitors without an account. */
+  public function visitor_has_workflow_approval(string $workflow_id, string $placement = 'default'): bool
+  {
+    $owner = $this->verification_owner();
+    if ('' === $owner || '' === $workflow_id) {
+      return false;
+    }
+    $map = get_option('didit_approved_' . $owner, []);
+    $candidates = [is_array($map) ? (string) ($map[$workflow_id] ?? '') : '', (string) get_option($this->resume_key($owner), '')];
+    foreach (array_unique(array_filter($candidates)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if ($this->session_belongs_to_request($record) && $this->record_approves($session_id, $record, $workflow_id, (int) ($record['user_id'] ?? 0), $placement)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The workflow is resolved first: for a session created before 0.4.0 that also records
+   * Didit's current decision, which is then the one judged.
+   */
+  private function record_approves(string $session_id, $record, string $workflow_id, int $user_id, string $placement): bool
+  {
+    if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== $user_id
+      || $this->session_workflow($session_id, $record) !== $workflow_id) {
+      return false;
+    }
+    $record = $this->stored_session($session_id);
+    return is_array($record)
+      && (int) ($record['user_id'] ?? 0) === $user_id
+      && 'Approved' === $this->normalize_status($record['status'] ?? '')
+      && $this->record_kind_matches($record, $placement);
+  }
+
+  public function confirmed_user_status($user_id): string
   {
     $session_id = (string) get_user_meta($user_id, '_didit_confirmed_session_id', true);
     // Earlier versions accepted browser claims. Those values must never unlock content.
@@ -1303,7 +1775,8 @@ final class Didit_Verify
     if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== (int) $user_id) {
       return '';
     }
-    return $this->normalize_status($record['status'] ?? '');
+    // A person's status: a company decision, or one of unknown kind, never approves.
+    return $this->grant_status($record, $this->normalize_status($record['status'] ?? ''), 'default');
   }
 
   public function is_user_verified($user_id): bool
@@ -1332,10 +1805,12 @@ final class Didit_Verify
   private function checkout_session_is_approved($session_id): bool
   {
     $record = $this->stored_session($session_id);
-    if (!$this->session_belongs_to_request($record) || !empty($record['consumed_order_id'])) {
+    $workflow_id = Didit_Verify_Workflows::workflow_for('checkout');
+    if ('' === $workflow_id || !$this->session_belongs_to_request($record) || !empty($record['consumed_order_id'])
+      || $this->session_workflow((string) $session_id, $record) !== $workflow_id) {
       return false;
     }
-    return 'Approved' === $this->confirm_session($session_id);
+    return 'Approved' === $this->confirm_session($session_id) && $this->record_kind_matches($this->stored_session($session_id), 'checkout');
   }
 
   private function attach_checkout_session($order, $session_id)
@@ -1350,6 +1825,9 @@ final class Didit_Verify
     $order->update_meta_data('_didit_session_id', $session_id);
     $order->update_meta_data('_didit_status', 'Approved');
     $order->update_meta_data('_didit_confirmed_session_id', $session_id);
+    if (!empty($record['report']) && is_array($record['report'])) {
+      $order->update_meta_data(Didit_Verify_Report::META, $record['report']);
+    }
     $order->save();
   }
 
@@ -1523,7 +2001,8 @@ final class Didit_Verify
       return new WP_Error('invalid_signature', __('Webhook signature mismatch.', 'didit-verify'), ['status' => 401]);
     }
 
-    if ('status.updated' !== ($payload['webhook_type'] ?? '')) {
+    $type = (string) ($payload['webhook_type'] ?? '');
+    if (!in_array($type, ['status.updated', 'data.updated'], true)) {
       return rest_ensure_response(['received' => true, 'ignored' => true]);
     }
 
@@ -1537,8 +2016,33 @@ final class Didit_Verify
     // by this server is allowed to route an approval to a user or order.
     $record = $this->stored_session($session_id);
     $status = $this->normalize_status($status);
-    if ($record && $status) {
-      $this->apply_confirmed_status($session_id, $record, $status, $timestamp);
+    if (!$record) {
+      return rest_ensure_response(['received' => true]);
+    }
+    // Check results are read from Didit, never from the delivery: a reviewer edit or an
+    // ongoing-monitoring update arrives as data.updated, and only its envelope is signed
+    // under every signature variant.
+    // The fetched decision is newer than any delivery, so its status and report are
+    // recorded together: an approval delivered after a reviewer declined stays declined.
+    // Without an API key no decision can be read: revocations still apply from the
+    // envelope, nothing is granted, and the 503 makes Didit retry once a key is set.
+    $report = null;
+    $decision = $this->fetch_decision($session_id);
+    if (!is_wp_error($decision)) {
+      $report = Didit_Verify_Report::summarize($decision);
+      $status = $decision['status'];
+      $record = $this->with_decision_facts($record, $decision);
+    } else {
+      // Revoking access is always safe to apply from the signed envelope; granting it
+      // waits for the decision. Either way Didit retries the delivery, which fetches the
+      // report again, so neither a stale nor a missing report is left behind.
+      if ('status.updated' === $type && $status && 'Approved' !== $status) {
+        $this->apply_confirmed_status($session_id, $record, $status, $timestamp);
+      }
+      return new WP_Error('didit_decision_unavailable', __('Unable to read the decision. Retry later.', 'didit-verify'), ['status' => 503]);
+    }
+    if ($status && !$this->apply_confirmed_status($session_id, $record, $status, $timestamp, $report)) {
+      return new WP_Error('didit_decision_busy', __('Unable to read the decision. Retry later.', 'didit-verify'), ['status' => 503]);
     }
 
     return rest_ensure_response(['received' => true]);
@@ -1915,7 +2419,7 @@ final class Didit_Verify
 
     if ($changed) {
       $order->update_meta_data('_didit_status', $status);
-      $order->add_order_note(sprintf(
+      Didit_Verify_Actions::add_result_note($order, sprintf(
         /* translators: 1: verification status, 2: source (browser/webhook). */
         __('Didit: verification status "%1$s" (via %2$s).', 'didit-verify'),
         $status,
@@ -1923,10 +2427,14 @@ final class Didit_Verify
       ));
     }
 
-    if ('Approved' === $status && 'verified-server' === $source && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
-      $order->delete_meta_data('_didit_held');
+    if ('Approved' === $status && 'verified-server' === $source) {
+      // Identity is resolved, but other outstanding reasons (an AML hold) keep the order on hold.
+      Didit_Verify_Actions::remove_hold_reason($order, 'identity');
       $order->save();
-      $order->update_status('processing', __('Didit: identity verified - order released.', 'didit-verify'));
+      $released = Didit_Verify_Actions::release_hold($order, __('Didit: identity verified - order released.', 'didit-verify'));
+      if (!$released && $changed && 'yes' === $order->get_meta('_didit_held') && $order->has_status('on-hold')) {
+        Didit_Verify_Actions::add_result_note($order, __('Didit: identity verified - the order stays on hold until the other Didit checks are resolved.', 'didit-verify'));
+      }
     } elseif ($changed) {
       $order->save();
     }
@@ -1983,7 +2491,7 @@ final class Didit_Verify
     $this->enqueue_sdk_assets();
   }
 
-  private function enqueue_sdk_assets()
+  public function enqueue_sdk_assets()
   {
     $this->enqueue_sdk_styles();
     $this->enqueue_sdk_scripts();
@@ -2092,7 +2600,9 @@ final class Didit_Verify
       'text' => $btn_text,
       'success_text' => $btn_success,
       'mode' => '',
+      'placement' => 'default',
     ], $atts, 'didit_verify');
+    $placement = Didit_Verify_Workflows::is_placement((string) $a['placement']) ? (string) $a['placement'] : 'default';
 
     $display = $a['mode'] ? $a['mode'] : get_option('didit_display_mode', 'modal');
     $is_embedded = ('embedded' === $display);
@@ -2100,6 +2610,9 @@ final class Didit_Verify
     $container_attr = $is_embedded ? sprintf(' data-container="%s"', esc_attr($container_id)) : '';
     if ('redirect' === $display) {
       $container_attr .= ' data-display="redirect"';
+    }
+    if ('default' !== $placement) {
+      $container_attr .= sprintf(' data-placement="%s"', esc_attr($placement));
     }
 
     $embed_html = $is_embedded
@@ -2133,7 +2646,8 @@ final class Didit_Verify
       return sprintf('<span class="didit-status didit-not-logged-in">%s</span>', esc_html($a['login_text']));
     }
 
-    $status = $this->confirmed_user_status(get_current_user_id());
+    // The status of the workflow these shortcodes run, not of any other check.
+    $status = $this->user_workflow_status(get_current_user_id(), Didit_Verify_Workflows::workflow_for('default'));
 
     if ('Approved' === $status) {
       return sprintf('<span class="didit-status didit-status-approved" style="color:#41D97F;">%s</span>', esc_html($a['verified_text']));
@@ -2161,7 +2675,9 @@ final class Didit_Verify
       );
     }
 
-    $status = $this->confirmed_user_status(get_current_user_id());
+    // Only an approval of the gate's own workflow unlocks it: passing an age check
+    // configured for products does not open content protected by the identity check.
+    $status = $this->user_workflow_status(get_current_user_id(), Didit_Verify_Workflows::workflow_for('default'));
     if ('Approved' === $status) {
       return '<div class="didit-gate didit-gate-unlocked">' . do_shortcode($content) . '</div>';
     }
@@ -2183,11 +2699,17 @@ final class Didit_Verify
   public function users_column($columns)
   {
     $columns['didit_verified'] = __('Didit', 'didit-verify');
+    if (get_option('didit_business_enabled', false)) {
+      $columns['didit_kyb'] = __('Didit KYB', 'didit-verify');
+    }
     return $columns;
   }
 
   public function users_column_content($output, $column_name, $user_id)
   {
+    if ('didit_kyb' === $column_name) {
+      return $this->admin_status_badge((string) get_user_meta($user_id, '_didit_kyb_status', true));
+    }
     if ('didit_verified' !== $column_name) {
       return $output;
     }
@@ -2213,9 +2735,9 @@ final class Didit_Verify
     return $this->admin_status_badge('');
   }
 
-  private function admin_status_badge($status, $title = '')
+  public function admin_status_badge($status, $title = '')
   {
-    $styles = ['Approved' => 'approved', 'Declined' => 'declined', 'In Review' => 'review'];
+    $styles = ['Approved' => 'approved', 'Declined' => 'declined', 'In Review' => 'review', 'Resubmitted' => 'review'];
     $label = $status ?: __('Not verified', 'didit-verify');
     return '<span class="didit-admin-status didit-admin-status-' . esc_attr($styles[$status] ?? 'pending') . '" title="' . esc_attr($title ?: $label) . '">' . esc_html($label) . '</span>';
   }
@@ -2306,7 +2828,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" <?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout" <?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed attribute strings from button_attributes(). ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <input type="hidden" name="didit_session_id" id="didit_session_id" value="" />
@@ -2322,10 +2844,7 @@ final class Didit_Verify
     if ('checkout' !== $this->wc_mode() || !$this->wc_cart_requires_verification()) {
       return;
     }
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing
-    $session_id = isset($_POST['didit_session_id'])
-      ? sanitize_text_field(wp_unslash($_POST['didit_session_id']))
-      : '';
+    $session_id = isset($_POST['didit_session_id']) ? sanitize_text_field(wp_unslash($_POST['didit_session_id'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- WooCommerce verifies the checkout nonce; the value is checked against this browser's session.
 
     if (!$this->checkout_session_is_approved($session_id)) {
       wc_add_notice(
@@ -2347,16 +2866,293 @@ final class Didit_Verify
 
   public function wc_show_order_meta($order)
   {
-    $session_id = $order->get_meta('_didit_session_id');
+    $session_id = (string) $order->get_meta('_didit_session_id');
     if ($session_id) {
       $status = (string) $this->confirmed_order_status($order);
       printf(
-        '<div class="didit-admin-order"><strong>%s</strong> %s<code>%s</code></div>',
+        '<div class="didit-admin-order"><strong>%s</strong> %s%s</div>',
         esc_html__('Didit Verification:', 'didit-verify'),
         $this->admin_status_badge($status), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
-        esc_html($session_id)
+        Didit_Verify_Report::render($order->get_meta(Didit_Verify_Report::META), $session_id) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
       );
     }
+    Didit_Verify_Actions::render_order_results($order);
+  }
+
+  public function register_eraser($erasers)
+  {
+    $erasers['didit-verify'] = [
+      'eraser_friendly_name' => __('Didit verification', 'didit-verify'),
+      'callback' => [$this, 'erase_personal_data'],
+    ];
+    return $erasers;
+  }
+
+  /**
+   * Delete a person's Didit results from this site: every session record bound to their
+   * account or to their orders (current and superseded), the verification status and
+   * check summaries on their account and on every order placed with their email or
+   * account (guest orders included), the plugin's result notes on those orders, and
+   * their sign-in link. Verification data held by Didit is deleted from the Didit Console.
+   * Orders are processed in pages, as WordPress asks erasers to do.
+   */
+  public function erase_personal_data($email, $page = 1)
+  {
+    $per_page = 50;
+    $page = max(1, (int) $page);
+    $user = get_user_by('email', $email);
+    $user_id = $user ? (int) $user->ID : 0;
+    $removed = false;
+
+    // Progress is kept between eraser pages: first the orders, 50 per page, then the
+    // stored sessions, one bounded batch per page from where the previous page stopped.
+    $state_key = 'didit_erase_' . md5(strtolower((string) $email));
+    $state = 1 === $page ? false : get_transient($state_key);
+    if (!is_array($state)) {
+      $state = ['orders_done' => false, 'order_page' => 0, 'order_ids' => [], 'cursor' => ''];
+    }
+
+    if (!$state['orders_done']) {
+      $orders = [];
+      if (function_exists('wc_get_orders')) {
+        $orders = wc_get_orders([
+          'customer' => array_values(array_filter([$email, $user_id])),
+          'limit' => $per_page,
+          'paged' => $state['order_page'] + 1,
+          'orderby' => 'ID',
+          'order' => 'ASC',
+          'type' => 'shop_order',
+        ]);
+        $orders = is_array($orders) ? $orders : [];
+      }
+      foreach ($orders as $order) {
+        $state['order_ids'][] = (int) $order->get_id();
+        $removed = $this->erase_order_results($order) || $removed;
+      }
+      $state['order_page']++;
+      $state['orders_done'] = count($orders) < $per_page;
+    }
+
+    if (1 === $page && $user_id) {
+      foreach ($this->didit_user_meta_keys($user_id) as $key) {
+        $removed = delete_user_meta($user_id, $key) || $removed;
+      }
+    }
+
+    $done = false;
+    if ($state['orders_done']) {
+      if ($user_id || $state['order_ids']) {
+        $batch = $this->erase_session_records($user_id, $state['order_ids'], $state['cursor']);
+        $removed = $batch['removed'] || $removed;
+        $state['cursor'] = $batch['cursor'];
+        $done = $batch['done'];
+      } else {
+        $done = true;
+      }
+    }
+    if ($done) {
+      delete_transient($state_key);
+    } else {
+      set_transient($state_key, $state, DAY_IN_SECONDS);
+    }
+
+    return [
+      'items_removed' => $removed,
+      'items_retained' => false,
+      'messages' => $removed ? [__('Didit verification results were deleted from this site. Delete the verification in the Didit Console to remove it from Didit.', 'didit-verify')] : [],
+      'done' => $done,
+    ];
+  }
+
+  /** Every user meta key this plugin wrote for the user (all start with _didit). */
+  private function didit_user_meta_keys(int $user_id): array
+  {
+    global $wpdb;
+    $keys = [
+      '_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_verified', '_didit_session_id', '_didit_status',
+      '_didit_verified_at', Didit_Verify_Report::META, '_didit_approved_workflows', '_didit_workflow_sessions', '_didit_placement_sessions',
+      '_didit_kyb_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_status', '_didit_kyb_verified_at', '_didit_kyb_report',
+      Didit_Verify_Sign_In::LEGACY_META, Didit_Verify_Sign_In::link_meta_key(),
+    ];
+    if (isset($wpdb) && is_object($wpdb) && method_exists($wpdb, 'get_col')) {
+      // Keys of other versions are collected by prefix. Sign-in links are kept per site on
+      // multisite: only this site's link (listed above) is erased here, never another
+      // site's, which the request did not cover.
+      // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- one-off lookup for a privacy erasure.
+      $found = $wpdb->get_col($wpdb->prepare(
+        "SELECT DISTINCT meta_key FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key LIKE %s",
+        $user_id,
+        $wpdb->esc_like('_didit') . '%'
+      ));
+      foreach (is_array($found) ? $found : [] as $key) {
+        if (0 !== strpos((string) $key, '_didit_auth_link_')) {
+          $keys[] = $key;
+        }
+      }
+    }
+    return array_values(array_unique(array_filter($keys)));
+  }
+
+  /** Remove the Didit results stored on an order, and the plugin's notes on it. */
+  private function erase_order_results($order): bool
+  {
+    $removed = false;
+    $sessions = [(string) $order->get_meta('_didit_session_id'), (string) $order->get_meta('_didit_confirmed_session_id')];
+    // A screening still queued would send the billing name to Didit and store a new
+    // result after this erasure, so it is cancelled first.
+    Didit_Verify_Actions::cancel_screening((int) $order->get_id());
+    $keys = ['_didit_session_id', '_didit_session_url', '_didit_status', '_didit_confirmed_session_id', '_didit_verified_at', Didit_Verify_Report::META,
+      '_didit_aml', '_didit_aml_requested', '_didit_aml_runs', '_didit_hold_reasons', Didit_Verify_Actions::hold_key('identity'), Didit_Verify_Actions::hold_key('aml'),
+      '_didit_held', '_didit_held_from', '_didit_hold_released', '_didit_reminder_count'];
+    foreach (['phone', 'email'] as $channel) {
+      foreach (['status', 'verified_hash', 'sent_hash'] as $suffix) {
+        $keys[] = '_didit_' . $channel . '_' . $suffix;
+      }
+    }
+    // WooCommerce orders list their meta, which also catches keys of other versions.
+    if (method_exists($order, 'get_meta_data')) {
+      foreach ($order->get_meta_data() as $meta) {
+        $key = is_object($meta) ? (string) ($meta->key ?? '') : '';
+        if (0 === strpos($key, '_didit')) {
+          $keys[] = $key;
+        }
+      }
+    }
+    foreach (array_unique($keys) as $key) {
+      $value = $order->get_meta($key);
+      if ('' !== $value && null !== $value && [] !== $value) {
+        $order->delete_meta_data($key);
+        $removed = true;
+      }
+    }
+    if ($removed) {
+      $order->save();
+    }
+    if (method_exists('Didit_Verify_Actions', 'delete_result_notes')) {
+      $removed = Didit_Verify_Actions::delete_result_notes((int) $order->get_id()) > 0 || $removed;
+    }
+    foreach (array_unique(array_filter($sessions)) as $session_id) {
+      $record = $this->stored_session($session_id);
+      if (is_array($record)) {
+        $this->delete_session_record($session_id, $record);
+        $removed = true;
+      }
+    }
+    return $removed;
+  }
+
+  /**
+   * Delete the stored sessions bound to the user or to one of the orders, including
+   * superseded attempts that no pointer leads to any more. One call reads one batch,
+   * from $cursor on, so an eraser page does bounded work on a large store.
+   *
+   * @return array{removed: bool, cursor: string, done: bool}
+   */
+  private function erase_session_records(int $user_id, array $order_ids, string $cursor = ''): array
+  {
+    global $wpdb;
+    $result = ['removed' => false, 'cursor' => $cursor, 'done' => true];
+    if (!isset($wpdb) || !is_object($wpdb) || !method_exists($wpdb, 'get_results')) {
+      return $result;
+    }
+    $limit = 500;
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the session records live in options under a hashed name.
+    $rows = $wpdb->get_results($wpdb->prepare(
+      "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name > %s ORDER BY option_name ASC LIMIT {$limit}",
+      $wpdb->esc_like('didit_bound_') . '%',
+      $cursor
+    ));
+    $rows = is_array($rows) ? $rows : [];
+    foreach ($rows as $row) {
+      $name = (string) $row->option_name;
+      $result['cursor'] = $name;
+      $record = maybe_unserialize($row->option_value);
+      if (!is_array($record)) {
+        continue;
+      }
+      $mine = ($user_id && ((int) ($record['user_id'] ?? 0) === $user_id || (int) ($record['consumed_user_id'] ?? 0) === $user_id))
+        || ($order_ids && (in_array((int) ($record['order_id'] ?? 0), $order_ids, true) || in_array((int) ($record['consumed_order_id'] ?? 0), $order_ids, true)));
+      if ($mine) {
+        delete_option($name);
+        // The option name carries the session ID's hash, so only this session's pointers go.
+        $this->forget_visitor_pointers($record, substr($name, strlen('didit_bound_')));
+        $result['removed'] = true;
+      }
+    }
+    $result['done'] = count($rows) < $limit;
+    return $result;
+  }
+
+  private function delete_session_record(string $session_id, array $record)
+  {
+    delete_option($this->session_key($session_id));
+    $this->forget_visitor_pointers($record, hash('sha256', $session_id));
+  }
+
+  /**
+   * Drop the browser's pointers and approvals that lead to an erased session, identified
+   * by the SHA-256 of its ID. Pointers of the same browser to other sessions (another
+   * customer on a shared computer, for example) are kept.
+   */
+  private function forget_visitor_pointers(array $record, string $session_hash)
+  {
+    $owner = (string) ($record['owner'] ?? '');
+    if (!preg_match('/^[a-f0-9]{64}$/', $owner) || '' === $session_hash) {
+      return;
+    }
+    $erased = function ($id) use ($session_hash) {
+      return is_string($id) && '' !== $id && hash_equals($session_hash, hash('sha256', $id));
+    };
+    foreach ([$this->resume_key($owner), $this->registration_key($owner)] as $key) {
+      if ($erased(get_option($key, ''))) {
+        delete_option($key);
+      }
+    }
+    $map = get_option('didit_approved_' . $owner, []);
+    if (is_array($map) && $map) {
+      $kept = array_filter($map, function ($id) use ($erased) { return !$erased($id); });
+      if ($kept === $map) {
+        return;
+      }
+      if ($kept) {
+        update_option('didit_approved_' . $owner, $kept, false);
+      } else {
+        delete_option('didit_approved_' . $owner);
+      }
+    }
+  }
+
+  /** Every check's result on the user's profile, for admins who can edit the user. */
+  public function user_profile_report($user)
+  {
+    if (!current_user_can('edit_user', $user->ID)) {
+      return;
+    }
+    // The verification report is for site managers; the self-service sign-in controls
+    // (link / unlink, nonce-protected) are for anyone who may edit this profile.
+    if (!current_user_can('list_users')) {
+      Didit_Verify_Sign_In::render_profile_link($user);
+      return;
+    }
+    $session_id = (string) get_user_meta($user->ID, '_didit_confirmed_session_id', true);
+    $kyb_session = (string) get_user_meta($user->ID, '_didit_kyb_session_id', true);
+    echo '<h2>' . esc_html__('Didit verification', 'didit-verify') . '</h2>';
+    echo '<table class="form-table" role="presentation"><tr><th>' . esc_html__('Identity', 'didit-verify') . '</th><td>';
+    echo $this->admin_status_badge($this->confirmed_user_status($user->ID)); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
+    if ($session_id) {
+      echo Didit_Verify_Report::render(get_user_meta($user->ID, Didit_Verify_Report::META, true), $session_id); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
+    }
+    echo '</td></tr>';
+    if ($kyb_session || get_option('didit_business_enabled', false)) {
+      echo '<tr><th>' . esc_html__('Business (KYB)', 'didit-verify') . '</th><td>';
+      echo $this->admin_status_badge((string) get_user_meta($user->ID, '_didit_kyb_status', true)); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
+      if ($kyb_session) {
+        echo Didit_Verify_Report::render(get_user_meta($user->ID, '_didit_kyb_report', true), $kyb_session); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by helper.
+      }
+      echo '</td></tr>';
+    }
+    echo '</table>';
+    Didit_Verify_Sign_In::render_profile_link($user);
   }
 
 
@@ -2464,26 +3260,37 @@ final class Didit_Verify
       return;
     }
     $order->update_meta_data('_didit_requires_verification', 'yes');
+    if (get_option('didit_wc_hold', false)) {
+      Didit_Verify_Actions::add_hold_reason($order, 'identity');
+    }
     $order->save();
     $this->wc_schedule_reminder($order->get_id());
   }
 
+  /**
+   * Records the identity reason when a fulfillment transition (processing or completed)
+   * happens before approval; Didit_Verify_Actions::enforce_holds() then holds the order for
+   * every outstanding reason (identity and AML). It is also hooked on its own, so AML holds
+   * apply without after-purchase verification. Only the "Release Didit hold" order action
+   * sets `_didit_hold_released`: a payment or any other automatic status change is never
+   * taken as the merchant's override.
+   */
   public function wc_maybe_hold_order($order_id, $from, $to, $order)
   {
-    static $holding = false;
     if (
-      $holding || 'processing' !== $to
-      || !get_option('didit_wc_hold', false) || 'after_purchase' !== $this->wc_mode()
-      || !$order->get_meta('_didit_requires_verification')
-      || 'Approved' === $this->confirmed_order_status($order)
+      in_array($to, ['processing', 'completed'], true)
+      && get_option('didit_wc_hold', false) && 'after_purchase' === $this->wc_mode()
+      && $order->get_meta('_didit_requires_verification')
+      && 'Approved' !== $this->confirmed_order_status($order)
+      && !$order->get_meta('_didit_hold_released')
     ) {
-      return;
+      Didit_Verify_Actions::add_hold_reason($order, 'identity');
+      $order->save();
+    } elseif ('Approved' === $this->confirmed_order_status($order) && in_array('identity', Didit_Verify_Actions::hold_reasons($order), true)) {
+      Didit_Verify_Actions::remove_hold_reason($order, 'identity');
+      $order->save();
     }
-    $holding = true;
-    $order->update_meta_data('_didit_held', 'yes');
-    $order->save();
-    $order->update_status('on-hold', __('Didit: order held until identity verification is approved.', 'didit-verify'));
-    $holding = false;
+    Didit_Verify_Actions::enforce_holds($order_id, $from, $to, $order);
   }
 
   public function wc_email_verification_link($order, $sent_to_admin, $plain_text, $email)
@@ -2566,7 +3373,7 @@ final class Didit_Verify
     $mailer->send($to, $subject, $mailer->wrap_message($subject, $body));
 
     $order->update_meta_data('_didit_reminder_count', $count + 1);
-    $order->add_order_note(sprintf(
+    Didit_Verify_Actions::add_result_note($order, sprintf(
       /* translators: 1: reminder number, 2: max reminders, 3: recipient email. */
       __('Didit: verification reminder %1$d of %2$d sent to %3$s.', 'didit-verify'),
       $count + 1,
@@ -2602,7 +3409,7 @@ final class Didit_Verify
         <?php echo esc_html($this->wc_checkout_text()); ?>
       </p>
       <button type="button" class="didit-verify-btn" data-text="<?php echo esc_attr($btn_text); ?>"
-        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1"<?php echo $button_attrs; ?>>
+        data-success="<?php echo esc_attr($btn_success); ?>" data-wc="1" data-placement="checkout"<?php echo $button_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- fixed attribute strings from button_attributes(). ?>>
         <?php echo esc_html($btn_text); ?>
       </button>
       <?php if ($is_embedded): ?>

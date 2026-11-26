@@ -8,8 +8,13 @@
   var i18n = cfg.i18n || {};
 
   var activeButton = null;
-  var pendingResult = null;
   var RESUME_KEY = "diditPendingSessionId";
+  var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+  // Each button keeps its own unfinished result, so checking one placement's status
+  // never replays or drops another placement's session.
+  function pendingOf(btn) { return btn ? btn.diditPending || null : null; }
+  function setPending(btn, result) { if (btn) btn.diditPending = result || null; }
 
   function feedback(btn, message, isError) {
     var node = btn.parentNode.querySelector('.didit-feedback');
@@ -34,8 +39,38 @@
     }
   }
 
-  function rememberSession(sessionId) {
-    try { window.sessionStorage.setItem(RESUME_KEY, sessionId); } catch (e) { /* storage may be blocked */ }
+  // Every placement has its own proof: registration writes its own field and checkout
+  // the order session, so finishing or cancelling one never clears the other.
+  function setPlacementSession(btn, sessionId) {
+    if (btn.dataset.placement === 'registration') {
+      var wrap = btn.closest('.didit-registration');
+      var field = wrap && wrap.querySelector('input[name="didit_registration_session_id"]');
+      if (field) field.value = sessionId;
+      return;
+    }
+    // Gated pages and account tabs keep their proof on the server only.
+    if (["product_gate", "my_account", "business"].indexOf(btn.dataset.placement || "") === -1) {
+      setCheckoutSession(sessionId);
+    }
+  }
+
+  // The redirect return remembers which placement started it, not just the session.
+  function rememberSession(sessionId, btn) {
+    var record = JSON.stringify({ id: sessionId, placement: (btn && btn.dataset.placement) || '' });
+    try { window.sessionStorage.setItem(RESUME_KEY, record); } catch (e) { /* storage may be blocked */ }
+  }
+
+  function storedSession() {
+    var raw = '';
+    try { raw = window.sessionStorage.getItem(RESUME_KEY) || ''; } catch (e) { raw = ''; }
+    if (!raw) return { id: '', placement: '' };
+    try {
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return { id: String(parsed.id || ''), placement: String(parsed.placement || '') };
+      }
+    } catch (e) { /* value written by an earlier version: a bare session ID */ }
+    return { id: raw, placement: '' };
   }
 
   function forgetSession() {
@@ -64,23 +99,34 @@
     }
   }
 
-  function returnedSessionId() {
+  function returnedSession() {
     var id = "";
     try {
       id = new URL(window.location.href).searchParams.get("verificationSessionId") || "";
     } catch (e) { id = ""; }
-    if (!id) {
-      try { id = window.sessionStorage.getItem(RESUME_KEY) || ""; } catch (e) { id = ""; }
-    }
-    return /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id) ? id : "";
+    var stored = storedSession();
+    if (!id) id = stored.id;
+    // The stored placement belongs to this return only when it names the same session.
+    var placement = stored.id && stored.id.toLowerCase() === id.toLowerCase() ? stored.placement : "";
+    return UUID.test(id) ? { id: id, placement: placement } : { id: "", placement: "" };
   }
 
-  // The shopper comes back from the hosted page: confirm what Didit decided and keep
-  // the checkout pointing at the same session, so the order carries the result.
+  function buttonFor(placement) {
+    var buttons = document.querySelectorAll(".didit-verify-btn");
+    for (var i = 0; i < buttons.length; i++) {
+      if ((buttons[i].dataset.placement || "") === placement) return buttons[i];
+    }
+    // A page with a single button (or a return stored by an earlier version).
+    return buttons.length === 1 || !placement ? buttons[0] || null : null;
+  }
+
+  // The shopper comes back from the hosted page: confirm what Didit decided on the
+  // button that started it, so each placement keeps its own result.
   function resumeReturnedSession() {
-    var sessionId = returnedSessionId();
+    var returned = returnedSession();
+    var sessionId = returned.id;
     if (!sessionId) return;
-    var btn = document.querySelector(".didit-verify-btn");
+    var btn = buttonFor(returned.placement);
     if (!btn || btn.classList.contains("didit-verified")) {
       forgetSession();
       return;
@@ -92,7 +138,7 @@
   function confirmResult(result, btn) {
     btn.textContent = i18n.confirming || 'Confirming verification…';
     btn.disabled = true;
-    setCheckoutSession('');
+    setPlacementSession(btn, '');
     var body = { type: 'completed', sessionId: result.session ? result.session.sessionId : '' };
     if (btn.dataset.orderId) {
       body.order_id = btn.dataset.orderId;
@@ -117,26 +163,30 @@
         btn.textContent = btn.dataset.success || 'Verified';
         btn.classList.add('didit-verified');
         btn.disabled = true;
-        pendingResult = null;
-        setCheckoutSession(data.sessionId);
+        setPending(btn, null);
+        setPlacementSession(btn, data.sessionId);
         feedback(btn, i18n.approved || 'Identity verified. You can continue.', false);
+        // Gated pages show what the approval unlocked.
+        if (["product_gate", "my_account", "business"].indexOf(btn.dataset.placement || "") !== -1) {
+          window.setTimeout(function () { window.location.reload(); }, 1200);
+        }
       } else if (data.status === 'Declined' || data.status === 'Abandoned' || data.status === 'Expired' || data.status === 'KYC Expired') {
-        pendingResult = null;
+        setPending(btn, null);
         resetBtn(btn);
         feedback(btn, data.status === 'Declined' ? (i18n.declined || 'Verification declined. Please try again.') : (i18n.expired || 'Verification expired. Please start again.'), true);
       } else {
-        pendingResult = result;
+        setPending(btn, result);
         btn.textContent = i18n.checkStatus || 'Check status';
         btn.disabled = false;
         feedback(btn, i18n.inReview || 'Your verification is being reviewed. Check again shortly.', false);
       }
       document.dispatchEvent(new CustomEvent('didit:complete', { detail: { type: 'completed', session: { sessionId: data.sessionId, status: data.status } } }));
     }).catch(function (error) {
-      pendingResult = result;
+      setPending(btn, result);
       btn.textContent = i18n.checkStatus || 'Check status';
       btn.disabled = false;
       if (error.code === 'didit_session_mismatch') {
-        pendingResult = null;
+        setPending(btn, null);
         resetBtn(btn);
       }
       feedback(btn, error.message, true);
@@ -147,8 +197,10 @@
     var btn = activeButton;
     if (!btn) return;
     if (result.type !== 'completed') {
-      pendingResult = null;
-      setCheckoutSession('');
+      // Cancelling clears only the placement that was being verified.
+      setPending(btn, null);
+      setPlacementSession(btn, '');
+      btn.classList.remove('didit-verified', 'didit-in-review');
       resetBtn(btn);
       return;
     }
@@ -224,12 +276,12 @@
     if (!btn || btn.disabled || btn.classList.contains("didit-verified")) return;
 
     e.preventDefault();
-    if (pendingResult && activeButton === btn) {
-      confirmResult(pendingResult, btn);
+    if (pendingOf(btn)) {
+      activeButton = btn;
+      confirmResult(pendingOf(btn), btn);
       return;
     }
     activeButton = btn;
-    pendingResult = null;
     btn.disabled = true;
     feedback(btn, '', false);
 
@@ -248,6 +300,10 @@
       }
       if (btn.dataset.display === "redirect") {
         requestBody.return_url = pageUrl();
+      }
+      // The server maps the placement to the workflow the admin chose for it.
+      if (btn.dataset.placement) {
+        requestBody.placement = btn.dataset.placement;
       }
 
       fetch(cfg.restUrl, {
@@ -286,7 +342,7 @@
     // The server marks every redirect button, so a shortcode's own mode always wins.
     if (btn.dataset.display === "redirect") {
       // The hosted page is the only place a blocked camera can recover the flow.
-      if (sessionId) rememberSession(sessionId);
+      if (sessionId) rememberSession(sessionId, btn);
       window.location.assign(url);
       return;
     }

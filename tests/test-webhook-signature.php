@@ -181,6 +181,16 @@ update_option('didit_bound_' . hash('sha256', $fixtures['session_id']), [
   'owner' => 'test-owner', 'user_id' => 42, 'order_id' => 0, 'event_timestamp' => 0,
 ], 86400);
 
+// Without an API key the decision cannot be read: nothing is granted and Didit retries.
+$response = handle($fresh['body'], $request_headers);
+ok(is_wp_error($response) && 503 === $response->get_error_data()['status'], 'without an API key an approval delivery asks Didit to retry');
+ok(($GLOBALS['didit_test_user_meta']['42|_didit_status'] ?? null) !== 'Approved', 'without an API key an approval delivery grants nothing');
+
+// The decision is read from Didit for every delivery.
+$GLOBALS['didit_test_options']['didit_api_key'] = 'test-only-key';
+$GLOBALS['didit_test_api_response'] = ['response' => ['code' => 200], 'body' => json_encode([
+  'session_id' => $fixtures['session_id'], 'session_kind' => 'user', 'status' => 'Approved',
+])];
 
 $response = handle($fresh['body'], $request_headers);
 ok(is_array($response) && !empty($response['received']), 'full delivery is accepted');

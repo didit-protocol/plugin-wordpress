@@ -1,81 +1,61 @@
 === Didit Verify ===
 Contributors: alexdidit
-Tags: identity verification, kyc, woocommerce, age verification, id check
+Tags: kyc, identity verification, age verification, woocommerce, aml
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.5
+Stable tag: 0.4.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Add identity verification to any WordPress page or WooCommerce checkout using Didit.
+Identity verification (KYC), age verification and AML screening for WordPress and WooCommerce, run by your Didit workflows.
 
 == Description ==
 
-Didit Verify lets you require identity verification on your WordPress site. Drop a shortcode on any page or require it at WooCommerce checkout.
+Didit Verify adds identity verification to WordPress and WooCommerce. You build the checks in the Didit Console as a workflow, and the plugin runs that workflow wherever you need it: at registration, at checkout, on age-restricted products, in My Account, or for business customers.
 
-**Secure checkout and content access:**
+**Workflows, not one check per plugin**
 
-API Session mode is required for checkout and content gating.
-The plugin creates a session for the current visitor and confirms its decision with Didit before granting access.
-UniLink mode opens a flow for manual review and does not grant checkout or content access.
-After updating from 0.3.1 or earlier, users must verify again before protected content is available.
+A Didit workflow can combine an ID document check, liveness, face match, AML (anti-money laundering) screening with ongoing monitoring, age estimation, phone and email verification, proof of address (PoA), database validation and, for companies, KYB (know your business) registry and key people checks. The plugin lists your workflows with the checks each one runs, and you choose one per placement:
 
-**Two integration modes:**
+* **Registration** - new accounts verify before they are created (WordPress and WooCommerce registration forms).
+* **WooCommerce checkout** - classic and block checkout, before the order is placed or after purchase.
+* **WooCommerce age gate** - age-restricted products and whole categories cannot be added to the cart until the shopper is approved by the age workflow.
+* **My Account re-verification** - a Verification tab where customers check their status and verify again.
+* **Business customers** - a KYB workflow from the same tab, tracked apart from the person's own identity check.
 
-* **UniLink** — paste a URL from the workflow you want from Didit Console. No backend needed.
-* **API Session** — [RECOMMENDED] the plugin creates a unique session per user. Your API key stays server-side.
+An approval only counts for the workflow that produced it, so an approval from a light check never opens a gate that needs a stricter one.
 
-**Display options:**
+**Every result where you work**
 
-* **Modal** — opens a centered overlay on top of the page
-* **Embedded** — renders the verification inline where the shortcode is placed
-* **Redirect** — opens the hosted verification page in the browser, for devices whose camera cannot start inside a frame
-* Configurable close button, exit confirmation dialog, and auto-close on completion
-* Debug logging for SDK events in the browser console
+WooCommerce orders and user profiles show each check's result from the Didit decision: ID document (type, subtype and country), liveness and face match scores, age, AML hits with PEP and sanctions flags and the ongoing-monitoring status, phone, email, proof of address, database validation and business registry data. A link opens the verification in the Didit Console in a new tab. Reviewer decisions and ongoing-monitoring updates reach the site by webhook later, without any action from you.
 
-**Button appearance:**
+**Optional direct checks**
 
-* Fully configurable from the admin panel: text, colors, border radius, padding, font size
-* Live preview in Settings that updates as you change values
-* Shortcode attributes can override the button text per page
+* **AML screening at checkout** - screen the billing name against sanctions and PEP lists when an order reaches an amount you choose, with optional ongoing monitoring and order hold.
+* **Phone and email verification** - ask customers to confirm the phone and email on their order with a one-time code.
 
-**Content gating:**
+**Sign in with Didit**
 
-* `[didit_gate]` shortcode — restrict any content to verified users only
-* `[didit_status]` shortcode — show the user's verification status anywhere
-* Verification status saved to WordPress user meta and visible in the admin Users list
+Add a "Sign in with Didit" button to the WordPress login page, with the sign-in methods your Didit application allows, including passkeys. Accounts link by verified email; accounts that can manage the site link only from their own profile.
 
-**WooCommerce support:**
+**Secure by design**
 
-* Require verification at checkout with 4 position options
-* Product scope: require verification for all products, only selected products, or all products except selected — with a per-product checkbox in the product editor
-* Customizable checkout copy: section title, checkout message, and post-purchase message editable from settings
-* Automatically send billing data (name, email, phone, address) to Didit for pre-filling and cross-validation
-* Verification session ID saved to order meta for audit
+* Only a decision confirmed with Didit on your server grants access. Browser claims never do.
+* The browser names a placement, never a workflow, and your API key never leaves the server.
+* Webhooks are signature-checked, replays change nothing, and results are read from Didit rather than from the delivery.
+* The plugin keeps a short summary of each result. It never stores ID images, selfies or raw verification data.
 
-**Translations:**
+**Also included**
 
-* All customer-facing text is translatable (text domain `didit-verify`, POT file included)
-* German translations included: `de_DE` (informal) and `de_DE_formal` (formal)
-
-**Developer extensibility:**
-
-* PHP action hooks: `didit_session_created`, `didit_verification_completed`, `didit_verification_cancelled`
-* PHP filter: `didit_sdk_url` to change the SDK CDN
-* DOM CustomEvent: `didit:complete` for frontend JavaScript
-
-**Security (API mode):**
-
-* API key stored server-side only — never sent to the browser
-* CSRF nonce on every request
-* Per-user rate limit: 10 sessions/hour
-* Per-IP rate limit: 3 sessions/hour (guests)
-* All input whitelisted and sanitized
+* `[didit_verify]`, `[didit_gate]` and `[didit_status]` shortcodes, with modal, embedded and redirect display modes.
+* Button appearance settings with a live preview.
+* Translatable, with German translations included.
+* Hooks for developers: `didit_session_created`, `didit_verification_completed`, `didit_verification_cancelled` and the `didit_sdk_url` filter, plus the `didit:complete` browser event.
 
 == Third-Party Service ==
 
-This plugin connects to the [Didit](https://didit.me) identity verification service to process user verifications. When a verification session is created (API mode), the plugin sends data to Didit's servers. When the verification UI is displayed, an iframe loads content from `verify.didit.me`.
+This plugin connects to the [Didit](https://didit.me) identity verification service to process user verifications. When a verification session is created (API mode), when the admin page lists your workflows, when an order is screened, when a phone or email code is sent, and when someone uses Sign in with Didit, the plugin sends data to Didit's servers (`verification.didit.me`, and your application's sign-in address for Sign in with Didit). When the verification UI is displayed, an iframe loads content from `verify.didit.me`.
 
 This plugin bundles the [Didit Web SDK](https://www.npmjs.com/package/@didit-protocol/sdk-web) (version 0.2.1) as `assets/js/didit-sdk.umd.min.js`. The full unminified source code is publicly available at the GitHub repository and npm package linked below.
 
@@ -88,132 +68,94 @@ This plugin bundles the [Didit Web SDK](https://www.npmjs.com/package/@didit-pro
 
 The SDK can be rebuilt from source with `npm install && npm run build` (uses Rollup). See the GitHub repository for full build instructions.
 
-No data is sent to Didit until the site administrator configures the plugin and a user initiates verification.
+No data is sent to Didit until the site administrator configures the plugin. Identity verification starts only when a user starts it. Phone and email codes are sent only when the customer asks for one on the order page. If the administrator turns on automatic AML screening, placing an order at or above the set threshold sends the billing name and an order or customer reference to Didit in the background, without any action from the shopper.
 
 == Installation ==
 
-1. Upload the `didit-verify` folder to `/wp-content/plugins/`
-2. Activate the plugin through **Plugins → Didit Verify**
-3. Go to **Settings → Didit Verify** and configure your mode:
+1. In WordPress, go to **Plugins > Add New**, search for **Didit Verify**, then click **Install Now** and **Activate**.
+2. Create a free account at [business.didit.me](https://business.didit.me) and build a workflow with the checks you need.
+3. In **Settings > Didit Verify**, choose **API Session** mode and paste your API key and default Workflow ID from the Didit Console.
+4. Under **Workflows and placements**, choose a workflow for each place where you want verification, and switch on the placements you use.
+5. Paste the webhook address shown under **Security** into the Didit Console (API & Webhooks) and copy the webhook secret back, so reviewer decisions and monitoring updates reach your site.
 
-**UniLink (simplest):**
-Enter the UniLink URL from your [Didit Console](https://business.didit.me) workflow.
-
-**API Session (recommended):**
-Enter your Workflow ID and API Key from the [Didit Console](https://business.didit.me).
-
-4. Add `[didit_verify]` to any page or post.
+You can test everything with a sandbox application first: sandbox checks are free.
 
 == Frequently Asked Questions ==
 
-= Where do I get a Workflow ID and API Key? =
+= Which checks can I use? =
 
-Sign up at [business.didit.me](https://business.didit.me), create a verification workflow and copy the Workflow ID. Then go to API & Webhooks and copy your API Key.
+Any check you add to a workflow in the Didit Console: ID document, liveness, face match, AML screening and ongoing monitoring, age estimation, phone, email, proof of address, database validation, and KYB registry and key people checks. The plugin shows the result of each one, so new checks you add to a workflow appear without updating the plugin.
 
-= What is the difference between UniLink and API mode? =
+= Can I use different checks in different places? =
 
-UniLink uses a single shared URL — quick to set up but every visitor uses the same session link. API mode creates a unique verification session per user with full tracking, and keeps your API key secure on the server.
+Yes. Each placement (registration, checkout, age-restricted products, My Account, business customers) can run its own workflow. Placements without a choice use the default Workflow ID.
 
-= Does it work without WooCommerce? =
+= How does the WooCommerce age gate work? =
 
-Yes. Use the `[didit_verify]` shortcode on any page. WooCommerce integration is optional.
+Mark products as **Age-restricted** in Product data > Advanced, or choose whole categories under **Workflows and placements**. Shoppers see a "Verify my age" button on those products, and the products cannot be added to the cart or bought until the age workflow approves the shopper.
+
+= How does AML screening at checkout work? =
+
+When it is on and an order reaches the amount you set, the plugin screens the billing name in the background and shows the result and any hits on the order. You can keep screened customers under ongoing monitoring and put orders that need review on hold. Admins can run the screening again from the order actions.
+
+= Can business customers verify their company? =
+
+Yes. Choose a KYB workflow for **Business customers** and switch the placement on. Customers verify their company from My Account > Verification, and the result appears on their user profile and in a KYB column in Users.
+
+= How does Sign in with Didit work? =
+
+Turn on Authentication for your application in the Didit Console, register the redirect URL shown in the plugin settings, and paste your publishable key and application ID. People sign in on Didit's sign-in page with the methods you allow, including passkeys. An account links by its verified email; accounts that can manage the site link only from their own profile, and new accounts are only created when anyone can register.
+
+= What happens to personal data when I delete it? =
+
+The WordPress personal data eraser (Tools > Erase Personal Data) deletes the person's Didit results, status and sign-in link from your site. Uninstalling the plugin deletes all of its settings and every Didit result stored on users and orders. Verification data held by Didit is deleted from the Didit Console.
+
+= Can I try it without real customers? =
+
+Yes. Use a sandbox application in the Didit Console. Sandbox checks are free, and you can set the outcome of a sandbox session to test approvals, declines and reviews.
 
 = Is my API key safe? =
 
-Yes. In API mode, the key is stored in the WordPress database and used only in server-to-server calls. It is never included in any HTML or JavaScript sent to the browser.
+Yes. The key is stored in your WordPress database and used only in server-to-server calls. It is never included in any page or script sent to the browser.
 
-= What is vendor data? =
+= What is the difference between UniLink and API mode? =
 
-Vendor data identifies each user in your Didit dashboard. The plugin automatically sends a per-user value based on your chosen mode:
-
-* **WordPress User ID** (default) — sends `wp-42`
-* **User Email** — sends the user's email address
-* **Custom prefix + User ID** — sends e.g. `mystore-42`
-* **None** — omits the field
-
-This enables session tracking and aggregation across multiple verifications for the same user.
+UniLink opens one shared verification link and does not grant access to protected content or checkout. API mode creates a session per visitor, confirms every decision with Didit, and is required for every placement and result described here.
 
 = How do I restrict content to verified users? =
 
-Wrap any content with the `[didit_gate]` shortcode:
-
-`[didit_gate]This content is only for verified users.[/didit_gate]`
-
-Unverified users see a message and a verification button. Once verified, the content is revealed. You can customize the message:
-
-`[didit_gate message="Please verify to continue."]Secret content here.[/didit_gate]`
-
-= How do I show verification status? =
-
-Use the `[didit_status]` shortcode. It shows "Identity Verified" or "Not Verified" for the logged-in user. You can customize all labels:
-
-`[didit_status verified_text="Verified!" unverified_text="Pending" login_text="Sign in first"]`
+Wrap content in `[didit_gate]...[/didit_gate]`. Visitors who are not verified see a message and a verification button. `[didit_status]` shows the visitor's status anywhere.
 
 = How do I check if a user is verified in PHP? =
 
-`get_user_meta($user_id, '_didit_verified', true)` returns `1` if verified. You can also check `_didit_status` for the result (Approved, Pending, Declined).
-
-= Can I hook into verification events? =
-
-Yes. The plugin fires WordPress actions:
-
-* `didit_verification_completed` — when a user completes verification (passes user ID, session ID, status)
-* `didit_verification_cancelled` — when a user cancels
-* `didit_session_created` — when a session is created server-side
-
-Use `add_action()` in your theme's `functions.php` to hook in.
-
-= Can I customize the button? =
-
-Go to **Settings → Didit Verify → Button Appearance**. You can change:
-
-* Button text and success text
-* Background color and text color
-* Border radius (0 = square, 50 = pill)
-* Padding (vertical and horizontal)
-* Font size
-
-A live preview updates in real time as you change values. You can also override the text per page:
-
-`[didit_verify text="Verify Now" success_text="Done!"]`
-
-The button has CSS class `didit-verify-btn` (and `didit-verified` after success) for further styling.
-
-= Can I change or translate the checkout page text? =
-
-Yes, both ways:
-
-* **Change it**: go to **Settings → Didit Verify → WooCommerce** and set **Section Title**, **Checkout Message**, and **Post-purchase Message**. Empty fields use the default text.
-* **Translate it**: the plugin ships with German translations (`de_DE` and `de_DE_formal`) and a POT file (`languages/didit-verify.pot`) for other languages. Default texts automatically follow the site language.
-
-= Can I require verification only for certain products? =
-
-Yes. Go to **Settings → Didit Verify → WooCommerce → Product Scope** and choose:
-
-* **All products** — verification applies to every order (default)
-* **Only selected products** — verification is required only when the cart contains a selected product
-* **All products except selected** — verification is skipped only when every product in the cart is selected
-
-Select products on the product edit page under **Product data → Advanced → Didit verification**. Mixed carts require verification whenever at least one product in the cart requires it. The scope applies to both checkout and after-purchase modes.
-
-= Can I switch between modal, embedded and redirect display? =
-
-Yes. Go to **Settings → Didit Verify → Display Options → Display Mode**. Choose Modal (popup overlay), Embedded (inline where the shortcode is) or Redirect (the hosted verification page in the browser). You can also override per shortcode:
-
-`[didit_verify mode="embedded"]`
+`Didit_Verify::init()->is_user_verified( $user_id )` returns `true` when Didit approved the user. `Didit_Verify::init()->user_has_workflow_approval( $user_id, $workflow_id )` checks a specific workflow.
 
 = When should I use Redirect display? =
 
-When the camera cannot start inside a frame, for example the liveness step on some Android Chrome devices. Redirect opens Didit's hosted page in the browser, so the camera runs at the top level. Shoppers return to the page where they started; the plugin then confirms the result and keeps the checkout session.
+When the camera cannot start inside a frame, for example the liveness step on some Android Chrome devices. Redirect opens Didit's hosted page in the browser; shoppers return to the page where they started.
 
 == Screenshots ==
 
-1. Settings page — configure mode, credentials, display options, and button appearance.
-2. Button Appearance section with live preview.
-3. Verification button on a page.
-4. WooCommerce checkout with verification step.
+1. Your Didit workflows with the checks each one runs, and the workflow chosen for each placement.
+2. A WooCommerce order with every check's result, AML hits and ongoing monitoring, and a link to the Didit Console.
+3. Verification at WooCommerce checkout.
+4. An age-restricted product asking the shopper to verify their age.
+5. The Verification tab in My Account, for people and businesses.
+6. Sign in with Didit on the WordPress login page.
 
 == Changelog ==
+
+= 0.4.0 =
+* New: the settings page lists your Didit workflows and the checks each one runs, and you choose a workflow per placement: registration, checkout, age-restricted products and categories, My Account re-verification and business customers (KYB).
+* New: an approval only opens gates of the workflow that produced it. Earlier approvals keep counting for the default workflow.
+* New: WooCommerce orders and user profiles show every check's result (ID document, liveness, face match, age, AML hits and ongoing monitoring, phone, email, proof of address, database validation, business registry and key people), with a link to the Didit Console.
+* New: reviewer edits and ongoing-monitoring updates (`data.updated` webhooks) refresh results, read again from Didit. The `Resubmitted` and `Awaiting User` statuses are recognized.
+* New: optional AML screening of the billing name above an order amount, with ongoing monitoring and order hold, and an order action to run it again.
+* New: optional phone and email verification of the order contact with one-time codes.
+* New: optional Sign in with Didit on the WordPress login page.
+* New: the WordPress personal data eraser removes a person's Didit results, and uninstalling removes every result stored on users and orders.
+* Releases are published to WordPress.org automatically from GitHub.
+
 
 = 0.3.5 =
 * Fix: retrying verification no longer creates another session or spends the visitor's hourly limit. The plugin reopens the session this browser (or this WooCommerce order) is already in, so a shopper can keep retrying until the flow completes. Before reopening a session the plugin asks Didit for its current status, so approved, declined, abandoned and expired sessions start a new verification, and the creation limit still stops a runaway loop.
@@ -304,6 +246,10 @@ When the camera cannot start inside a frame, for example the liveness step on so
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.4.0 =
+Choose a Didit workflow per placement, see every check's result on orders and profiles, and add optional AML screening, phone and email codes and Sign in with Didit.
+
 
 = 0.3.4 =
 Security update for protected content: revocations now apply to the verification granting access even when another attempt is pending.

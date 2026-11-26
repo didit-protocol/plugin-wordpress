@@ -46,7 +46,8 @@ function sanitize_text_field($value) { return trim(strip_tags((string) $value));
 function current_time() { return '2026-03-31 12:00:00'; }
 function shortcode_atts($pairs, $atts) { return array_merge($pairs, (array) $atts); }
 function selected($a, $b, $echo = true) { $out = ((string) $a === (string) $b) ? ' selected="selected"' : ''; if ($echo) { echo $out; } return $out; }
-function apply_filters($hook, $value) { return $value; }
+// Tests may set $GLOBALS['didit_test_filters'][$hook] = callable to stand in for a hooked filter.
+function apply_filters($hook, $value, ...$args) { $cb = $GLOBALS['didit_test_filters'][$hook] ?? null; return is_callable($cb) ? $cb($value, ...$args) : $value; }
 function home_url($path = '') { return 'https://example.test/' . ltrim($path, '/'); }
 function wp_parse_url($url, $component = -1) { return parse_url($url, $component); }
 function rest_url($path = '') { return 'https://example.test/wp-json/' . ltrim($path, '/'); }
@@ -83,6 +84,15 @@ function get_users($args) {
       $matches[] = $id;
     }
   }
+  // Any other user meta written during the test.
+  if (isset($args['meta_key'], $args['meta_value']) && '_didit_session_id' !== $args['meta_key']) {
+    foreach ($GLOBALS['didit_test_user_meta'] as $key => $value) {
+      list($id, $name) = explode('|', $key, 2);
+      if ($name === $args['meta_key'] && $value === $args['meta_value']) {
+        $matches[] = (int) $id;
+      }
+    }
+  }
   return array_slice($matches, 0, isset($args['number']) ? (int) $args['number'] : count($matches));
 }
 
@@ -115,6 +125,7 @@ class WP_Error {
   }
   public function get_error_code() { return $this->code; }
   public function get_error_data() { return $this->data; }
+  public function get_error_message() { return $this->message; }
 }
 
 /**
@@ -172,3 +183,14 @@ function wp_json_encode($data) { return json_encode($data); }
 function wp_unslash($value) { return is_string($value) ? stripslashes($value) : $value; }
 
 function update_option($key, $value, $autoload = null) { $GLOBALS['didit_test_options'][$key] = $value; }
+if (!function_exists('delete_option')) {
+  function delete_option($key) { unset($GLOBALS['didit_test_options'][$key]); }
+}
+
+if (!function_exists('add_option')) {
+  function add_option($key, $value = '', $deprecated = '', $autoload = 'yes') {
+    if (array_key_exists($key, $GLOBALS['didit_test_options'])) { return false; }
+    $GLOBALS['didit_test_options'][$key] = $value;
+    return true;
+  }
+}
