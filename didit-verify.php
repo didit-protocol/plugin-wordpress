@@ -1026,12 +1026,16 @@ final class Didit_Verify
       return '';
     }
     $decision = $this->fetch_decision($session_id);
-    if (!is_wp_error($decision)) {
-      $record = $this->with_decision_facts($record, $decision);
-    }
     $record['workflow_lookup_at'] = time();
-    $this->store_session($session_id, $record);
-    return $this->record_workflow($record);
+    if (is_wp_error($decision)) {
+      $this->store_session($session_id, $record);
+      return '';
+    }
+    // Record what Didit decides now, status and subject kind included, before the
+    // migrated session is judged: an approval Didit has since declined grants nothing.
+    $record = $this->with_decision_facts($record, $decision);
+    $this->apply_confirmed_status($session_id, $record, $decision['status'], time(), Didit_Verify_Report::summarize($decision));
+    return $this->record_workflow($this->stored_session($session_id));
   }
 
   /**
@@ -1053,23 +1057,37 @@ final class Didit_Verify
   }
 
   /**
-   * Whether the session verified the kind of subject its placement is for: a company
-   * for business customers, a person everywhere else. A KYB workflow chosen for
-   * checkout, or a KYC workflow chosen for business customers, approves nothing.
+   * Whether the session verified the kind of subject a placement is for: a company for
+   * business customers, a person everywhere else. $placement is the placement that uses
+   * the approval (by default the one that started the session), so a company approval
+   * never satisfies a personal check that shares its workflow, nor the reverse.
+   *
+   * Only the kind Didit confirmed in a decision grants anything. With $confirmed false,
+   * an open session not decided yet is judged by the workflow's type in the catalogue,
+   * which is enough to show its progress but never to grant access.
    */
-  public function record_kind_matches($record): bool
+  public function record_kind_matches($record, string $placement = '', bool $confirmed = true): bool
   {
     if (!is_array($record)) {
       return false;
     }
-    $expected = 'business' === ($record['placement'] ?? '') ? 'business' : 'user';
+    $placement = '' !== $placement ? $placement : (string) ($record['placement'] ?? '');
+    $expected = 'business' === $placement ? 'business' : 'user';
     $kind = (string) ($record['session_kind'] ?? '');
     if ('' === $kind) {
-      // Not confirmed by a decision yet: fall back to the workflow's type in the catalogue.
+      if ($confirmed) {
+        return false;
+      }
       $type = Didit_Verify_Workflows::type_of($this->record_workflow($record));
       $kind = '' === $type ? $expected : ('kyb' === $type ? 'business' : 'user');
     }
     return $kind === $expected;
+  }
+
+  /** What a Didit status grants for a placement: an approval of the wrong kind of subject declines. */
+  public function grant_status($record, string $status, string $placement = ''): string
+  {
+    return 'Approved' === $status && !$this->record_kind_matches($record, $placement) ? 'Declined' : $status;
   }
 
   public function rest_create_session($request)
@@ -1439,8 +1457,13 @@ final class Didit_Verify
     if (is_wp_error($decision)) {
       return $decision;
     }
-    $this->apply_confirmed_status($session_id, $this->with_decision_facts($record, $decision), $decision['status'], time(), Didit_Verify_Report::summarize($decision));
-    return $decision['status'];
+    $record = $this->with_decision_facts($record, $decision);
+    if (!$this->apply_confirmed_status($session_id, $record, $decision['status'], time(), Didit_Verify_Report::summarize($decision))) {
+      return new WP_Error('didit_confirmation_busy', __('Unable to confirm verification. Please try again.', 'didit-verify'), ['status' => 503]);
+    }
+    // What the session grants for its own placement, never the raw status: a company
+    // approval of a registration workflow creates no account.
+    return $this->grant_status($this->stored_session($session_id), $decision['status']);
   }
 
   /**
