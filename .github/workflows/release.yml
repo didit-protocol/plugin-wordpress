@@ -1,0 +1,81 @@
+name: Release to WordPress.org
+# A v* tag builds the plugin and publishes trunk, tags/VERSION and the listing assets to
+# the WordPress.org SVN. Run it by hand with "dry_run" to build and stage without committing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and stage the SVN changes without committing them'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: wordpress-org-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - name: Resolve version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then tag="$REF_NAME"; else tag="v$(sed -n 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*\([^[:space:]]*\).*/\1/p' didit-verify.php | head -n1)"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Check the tag, plugin header and readme Stable tag agree
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: bin/check-version.sh "$TAG"
+      - name: Lint and test
+        run: |
+          for f in didit-verify.php uninstall.php includes/*.php; do php -l "$f"; done
+          for t in tests/test-*.php; do php "$t"; done
+      - name: Build
+        run: bin/build-zip.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: didit-verify-${{ steps.version.outputs.version }}
+          path: build/didit-verify.zip
+          retention-days: 30
+      - name: Decide how to publish
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_INPUT: ${{ inputs.dry_run }}
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        run: |
+          dry=false
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$DRY_INPUT" != "false" ]; then dry=true; fi
+          if [ "$dry" = "false" ] && { [ -z "$SVN_USERNAME" ] || [ -z "$SVN_PASSWORD" ]; }; then
+            echo "::notice title=WordPress.org release skipped::Add the SVN_USERNAME and SVN_PASSWORD repository secrets to publish. The zip is attached to this run."
+            {
+              echo "### WordPress.org release skipped"
+              echo "The repository secrets \`SVN_USERNAME\` and \`SVN_PASSWORD\` are not set, so nothing was published."
+              echo "The release zip is attached to this run as an artifact."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "dry_run=$dry" >> "$GITHUB_OUTPUT"
+      - name: Publish to WordPress.org SVN
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        run: bin/deploy-svn.sh
