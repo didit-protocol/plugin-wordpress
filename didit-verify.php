@@ -1441,17 +1441,9 @@ final class Didit_Verify
     if ($order) {
       return (int) $record['order_id'] === (int) $order->get_id();
     }
-    if (!empty($record['order_id'])) {
-      return false;
-    }
-    // A signed-in account owns its sessions on any device, so a customer asked by a
-    // reviewer to resubmit can continue from another browser. A session started without
-    // an account belongs only to the browser that started it.
-    $user_id = (int) ($record['user_id'] ?? 0);
-    if ($user_id > 0) {
-      return $user_id === get_current_user_id();
-    }
-    return hash_equals((string) ($record['owner'] ?? ''), $this->verification_owner());
+    return empty($record['order_id'])
+      && (0 === (int) $record['user_id'] || (int) $record['user_id'] === get_current_user_id())
+      && hash_equals($record['owner'], $this->verification_owner());
   }
 
   public function normalize_status($status): string
