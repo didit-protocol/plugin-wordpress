@@ -139,6 +139,12 @@ if (!function_exists('add_comment_meta')) {
 }
 if (!function_exists('get_comments')) {
   function get_comments($args) {
+    if (!isset($args['meta_key'])) {
+      // Notes as objects, for the lookup of unmarked notes of earlier versions.
+      return array_values(array_filter($GLOBALS['didit_test_comment_objects'] ?? [], function ($note) use ($args) {
+        return (int) $note->comment_post_ID === (int) ($args['post_id'] ?? 0);
+      }));
+    }
     $GLOBALS['didit_test_comments_query'] = $args;
     $ids = [];
     foreach ($GLOBALS['didit_test_comment_meta'] as $id => $meta) {

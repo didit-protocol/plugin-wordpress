@@ -186,3 +186,11 @@ function update_option($key, $value, $autoload = null) { $GLOBALS['didit_test_op
 if (!function_exists('delete_option')) {
   function delete_option($key) { unset($GLOBALS['didit_test_options'][$key]); }
 }
+
+if (!function_exists('add_option')) {
+  function add_option($key, $value = '', $deprecated = '', $autoload = 'yes') {
+    if (array_key_exists($key, $GLOBALS['didit_test_options'])) { return false; }
+    $GLOBALS['didit_test_options'][$key] = $value;
+    return true;
+  }
+}

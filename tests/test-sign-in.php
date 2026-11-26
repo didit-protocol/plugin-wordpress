@@ -124,8 +124,14 @@ $GLOBALS['didit_test_users'][7] = '';
 $result = Didit_Verify_Sign_In::resolve_user('sub-7', 'sam@example.test', true);
 check(is_wp_error($result) && 'not_allowed' === $result->get_error_code() && '' === get_user_meta(7, '_didit_auth_link_2'), 'an email is not linked to an account that is not a member of this site');
 $GLOBALS['didit_test_blog_members'][2][] = 7;
+$result = Didit_Verify_Sign_In::resolve_user('sub-7', 'sam@example.test', true);
+check(is_wp_error($result) && 'link_first' === $result->get_error_code() && '' === get_user_meta(7, '_didit_auth_link_2'), 'on multisite an existing account is never signed in by email match');
+$GLOBALS['didit_test_caps'][7] = [];
+$result = Didit_Verify_Sign_In::resolve_user('sub-7', 'sam@example.test', true);
+check(is_wp_error($result) && 'link_first' === $result->get_error_code(), 'a subscriber here who may be an administrator elsewhere must link from the profile');
+$GLOBALS['didit_test_user_meta']['7|_didit_auth_link_2'] = Didit_Verify_Sign_In::link_value('sub-7');
 $user = Didit_Verify_Sign_In::resolve_user('sub-7', 'sam@example.test', true);
-check(7 === $user->ID && '' !== get_user_meta(7, '_didit_auth_link_2') && '' === get_user_meta(7, $link_key), "a member of this site links on this site only");
+check(is_object($user) && 7 === $user->ID && '' === get_user_meta(7, $link_key), 'an account linked from its profile on this site signs in here only');
 
 // Account restrictions before the login cookie.
 $GLOBALS['didit_test_spam_users'] = [7];
@@ -140,6 +146,15 @@ $GLOBALS['didit_test_filters']['wp_authenticate_user'] = function ($user, $passw
 $result = Didit_Verify_Sign_In::log_in($GLOBALS['didit_test_wp_users'][7]);
 check(is_wp_error($result) && 'not_allowed' === $result->get_error_code() && [] === $GLOBALS['didit_test_auth_cookies'], 'a login denied by wp_authenticate_user sets no cookie');
 unset($GLOBALS['didit_test_filters']['wp_authenticate_user']);
+$GLOBALS['didit_test_filters']['authenticate'] = function ($user, $login, $password) {
+  return 'sam' === $login ? new WP_Error('account_suspended') : $user;
+};
+$result = Didit_Verify_Sign_In::log_in($GLOBALS['didit_test_wp_users'][7]);
+check(is_wp_error($result) && 'not_allowed' === $result->get_error_code() && [] === $GLOBALS['didit_test_auth_cookies'], 'a login denied on the authenticate filter sets no cookie');
+$GLOBALS['didit_test_filters']['authenticate'] = function ($user, $login, $password) { return null; };
+$result = Didit_Verify_Sign_In::log_in($GLOBALS['didit_test_wp_users'][7]);
+check(is_wp_error($result) && [] === $GLOBALS['didit_test_auth_cookies'], 'an authenticate filter that drops the user sets no cookie');
+unset($GLOBALS['didit_test_filters']['authenticate']);
 $user = Didit_Verify_Sign_In::log_in($GLOBALS['didit_test_wp_users'][7]);
 check(is_object($user) && [7] === $GLOBALS['didit_test_auth_cookies'] && 7 === get_current_user_id(), 'an allowed account receives the login cookie');
 $GLOBALS['didit_test_auth_cookies'] = [];

@@ -10,6 +10,14 @@ require __DIR__ . '/wp-stubs-features.php';
 require __DIR__ . '/../didit-verify.php';
 
 $opts = &$GLOBALS['didit_test_options'];
+$GLOBALS['didit_test_caps'] = [];
+if (!function_exists('current_user_can')) {
+  function current_user_can($cap, ...$args) { return in_array($cap, $GLOBALS['didit_test_caps'], true); }
+}
+$GLOBALS['didit_test_query_vars'] = [];
+if (!function_exists('get_query_var')) {
+  function get_query_var($name, $default = '') { return $GLOBALS['didit_test_query_vars'][$name] ?? $default; }
+}
 $opts['didit_api_key'] = 'test-only-key';
 
 // AML threshold and scheduling.
@@ -24,6 +32,7 @@ check(!$GLOBALS['didit_test_scheduled'], 'orders below the threshold are not scr
 Didit_Verify_Actions::maybe_schedule_aml($large);
 Didit_Verify_Actions::maybe_schedule_aml($large);
 check([['didit_aml_screen_order', [11]]] === $GLOBALS['didit_test_scheduled'], 'an order at the threshold is screened once, in the background');
+check('' === $large->get_meta('_didit_hold_aml'), 'without the AML hold setting no hold reason is recorded at checkout');
 check(0.0 === Didit_Verify_Actions::sanitize_amount('-5'), 'a negative threshold is stored as zero');
 
 $k1 = Didit_Verify_Actions::idempotency_key(11, 'Jane Doe');
@@ -52,6 +61,7 @@ check(false === strpos(json_encode($large->meta), 'test-only-key'), 'the API key
 
 $GLOBALS['didit_test_post_response'] = function () { return new WP_Error('offline'); };
 $failing = new Didit_Test_Order(13, ['total' => 500]);
+$failing->meta['_didit_aml_requested'] = 'yes';
 Didit_Verify_Actions::screen_order(13);
 check('' === $failing->get_meta('_didit_aml') && false !== strpos(end($failing->notes), 'could not run'), 'a network failure leaves a note and no result');
 
@@ -67,6 +77,7 @@ $GLOBALS['didit_test_post_response'] = function () {
   return ['response' => ['code' => 200], 'body' => json_encode(['aml' => ['status' => 'Approved', 'total_hits' => 0]])];
 };
 $queued = new Didit_Test_Order(14, ['total' => 500]);
+$queued->meta['_didit_aml_requested'] = 'yes';
 $opts['didit_aml_enabled'] = false;
 $GLOBALS['didit_test_api_posts'] = [];
 Didit_Verify_Actions::screen_order(14);
@@ -79,6 +90,26 @@ $opts['didit_aml_enabled'] = false;
 Didit_Verify_Actions::order_action_screen($queued);
 check(1 === count($GLOBALS['didit_test_api_posts']) && 'Approved' === $queued->get_meta('_didit_aml')['status'], 'an admin rerun from the order actions still runs');
 $opts['didit_aml_enabled'] = true;
+
+// Erasure: a queued screening is cancelled, and a job that still runs sends nothing.
+$erased = new Didit_Test_Order(19, ['total' => 500]);
+$GLOBALS['didit_test_api_posts'] = [];
+$GLOBALS['didit_test_unscheduled'] = [];
+Didit_Verify_Actions::screen_order(19);
+check(!$GLOBALS['didit_test_api_posts'] && '' === $erased->get_meta('_didit_aml'), 'a queued screening whose request was erased sends nothing and stores nothing');
+Didit_Verify_Actions::cancel_screening(19);
+check(in_array(['clear', 'didit_aml_screen_order', [19]], $GLOBALS['didit_test_unscheduled'], true)
+  && in_array(['as', 'didit_aml_screen_order'], $GLOBALS['didit_test_unscheduled'], true), 'erasing an order cancels its queued screening');
+$erased->meta['_didit_aml_requested'] = 'yes';
+$opts['didit_aml_threshold'] = 50.0;
+$GLOBALS['didit_test_api_posts'] = [];
+$GLOBALS['didit_test_post_response'] = function () use ($erased) {
+  unset($erased->meta['_didit_aml_requested']); // Erased while the call was in flight.
+  return ['response' => ['code' => 200], 'body' => json_encode(['aml' => ['status' => 'Declined', 'total_hits' => 1]])];
+};
+$notes = count($erased->notes);
+Didit_Verify_Actions::screen_order(19);
+check(1 === count($GLOBALS['didit_test_api_posts']) && '' === $erased->get_meta('_didit_aml') && $notes === count($erased->notes), 'a result arriving after erasure is not saved');
 $opts['didit_aml_threshold'] = 50.0;
 
 /** Order whose notes get comment IDs and whose creation date can be set. */
@@ -106,6 +137,7 @@ $plugin = Didit_Verify::init();
 $opts['didit_wc_mode'] = 'after_purchase';
 $opts['didit_wc_hold'] = true;
 $both = new Didit_Test_Noted_Order(15, ['total' => 500]);
+$both->meta['_didit_aml_requested'] = 'yes';
 $both->meta['_didit_requires_verification'] = 'yes';
 $both->meta['_didit_session_id'] = 'sess-15';
 $plugin->wc_maybe_hold_order(15, 'pending', 'processing', $both);
@@ -121,6 +153,7 @@ check('processing' === $both->status && !Didit_Verify_Actions::hold_reasons($bot
   'once the AML screening clears too, the order is released');
 
 $virtual = new Didit_Test_Noted_Order(16, ['total' => 500]);
+$virtual->meta['_didit_aml_requested'] = 'yes';
 $virtual->status = 'completed';
 aml_result('In Review');
 Didit_Verify_Actions::screen_order(16);
@@ -130,6 +163,7 @@ Didit_Verify_Actions::order_action_screen($virtual);
 check('completed' === $virtual->status, 'releasing it restores the status it was held from');
 
 $unpaid = new Didit_Test_Noted_Order(17, ['total' => 500]);
+$unpaid->meta['_didit_aml_requested'] = 'yes';
 $unpaid->status = 'pending';
 aml_result('Declined');
 Didit_Verify_Actions::screen_order(17);
@@ -137,23 +171,88 @@ check('pending' === $unpaid->status && ['aml'] === Didit_Verify_Actions::hold_re
 $unpaid->status = 'processing';
 Didit_Verify_Actions::enforce_holds(17, 'pending', 'processing', $unpaid);
 check('on-hold' === $unpaid->status, 'payment then moves the order to on-hold instead of processing');
-$unpaid->status = 'processing'; // The merchant releases the hold by hand.
+$unpaid->status = 'processing'; // A payment notification or status edit moves it out of on-hold.
 Didit_Verify_Actions::enforce_holds(17, 'on-hold', 'processing', $unpaid);
+check('on-hold' === $unpaid->status && ['aml'] === Didit_Verify_Actions::hold_reasons($unpaid) && '' === $unpaid->get_meta('_didit_hold_released'),
+  'leaving on-hold without the release action is not an override: the reason stays and the order is held again');
+$GLOBALS['didit_test_caps'] = [];
+Didit_Verify_Actions::order_action_release($unpaid);
+check('on-hold' === $unpaid->status && ['aml'] === Didit_Verify_Actions::hold_reasons($unpaid), 'the release action needs a user who can edit orders');
+$GLOBALS['didit_test_caps'] = ['edit_shop_orders'];
+Didit_Verify_Actions::order_action_release($unpaid);
 $plugin->wc_maybe_hold_order(17, 'on-hold', 'processing', $unpaid);
-check('processing' === $unpaid->status && !Didit_Verify_Actions::hold_reasons($unpaid) && 'yes' === $unpaid->get_meta('_didit_hold_released'),
-  'a manual release by the merchant is respected and not fought');
+check('processing' === $unpaid->status && !Didit_Verify_Actions::hold_reasons($unpaid) && 'yes' === $unpaid->get_meta('_didit_hold_released')
+  && isset($GLOBALS['didit_test_comment_meta'][max(array_keys($unpaid->note_ids))]),
+  'the explicit release action by the merchant is respected, not fought, and its note is marked');
+$GLOBALS['didit_test_caps'] = [];
 $unpaid->meta['_didit_requires_verification'] = 'yes';
 $unpaid->status = 'completed';
 $plugin->wc_maybe_hold_order(17, 'processing', 'completed', $unpaid);
 check('completed' === $unpaid->status, 'a manually released order is not held again for identity');
 
 $gateway = new Didit_Test_Noted_Order(18, ['total' => 500]);
+$gateway->meta['_didit_aml_requested'] = 'yes';
 $gateway->status = 'on-hold'; // Awaiting a bank transfer, not held by Didit.
 aml_result('Declined');
 Didit_Verify_Actions::screen_order(18);
 $gateway->status = 'processing';
 Didit_Verify_Actions::enforce_holds(18, 'on-hold', 'processing', $gateway);
 check('on-hold' === $gateway->status, 'a payment confirmation out of a gateway hold is still gated on the AML reason');
+
+// Holds are chosen before WooCommerce publishes processing or completed.
+class Didit_Test_Saving_Order extends Didit_Test_Noted_Order {
+  public $saved_status = 'pending';
+  public $status_transition = false;
+  public function get_data() { return ['status' => $this->saved_status]; }
+  public function get_changes() { return $this->status !== $this->saved_status ? ['status' => $this->status] : []; }
+  public function set_status($status) { $this->status_transition = ['from' => $this->saved_status, 'to' => $status]; $this->status = $status; }
+}
+$opts['didit_aml_hold'] = true;
+$early = new Didit_Test_Saving_Order(70, ['total' => 500]);
+$early->status = 'pending';
+$GLOBALS['didit_test_scheduled'] = [];
+Didit_Verify_Actions::maybe_schedule_aml($early);
+check('pending' === $early->get_meta('_didit_hold_aml') && ['aml'] === Didit_Verify_Actions::hold_reasons($early),
+  'with the hold setting the AML reason is recorded at checkout, before payment');
+check('on-hold' === Didit_Verify_Actions::payment_complete_status('completed', 70, $early) && 'completed' === $early->get_meta('_didit_held_from'),
+  'payment of a virtual order selects on-hold while the screening runs, so no completed email is sent');
+$early->status = 'processing';
+Didit_Verify_Actions::gate_status_change($early);
+check('on-hold' === $early->status, 'a gateway that sets processing itself is kept on hold before the save');
+$early->saved_status = 'on-hold';
+$early->status = 'processing';
+Didit_Verify_Actions::gate_status_change($early);
+check('on-hold' === $early->status && false === $early->status_transition, 'an order already on hold stays on hold without a repeated on-hold transition');
+check('processing' === Didit_Verify_Actions::payment_complete_status('processing', 71, new Didit_Test_Order(71)), 'an order without Didit reasons is paid normally');
+aml_result('');
+$GLOBALS['didit_test_post_response'] = function () { return ['response' => ['code' => 200], 'body' => json_encode(['aml' => ['total_hits' => 0]])]; };
+$early->meta['_didit_held'] = 'yes';
+Didit_Verify_Actions::screen_order(70);
+check('on-hold' === $early->status && ['aml'] === Didit_Verify_Actions::hold_reasons($early) && false !== strpos(end($early->notes), 'no usable result'),
+  'a response without an AML status keeps the hold and says so');
+aml_result('Approved');
+$early->status = 'on-hold';
+Didit_Verify_Actions::screen_order(70);
+check(!Didit_Verify_Actions::hold_reasons($early) && 'processing' === $early->status, 'an explicit clean result releases it');
+
+// Each reason is stored on its own, so a stale copy of the order cannot write an old reason back.
+$shared = new Didit_Test_Noted_Order(72, ['total' => 500]);
+Didit_Verify_Actions::add_hold_reason($shared, 'identity');
+Didit_Verify_Actions::add_hold_reason($shared, 'aml', 'flagged');
+Didit_Verify_Actions::remove_hold_reason($shared, 'identity');
+check('' === $shared->get_meta('_didit_hold_identity') && 'flagged' === $shared->get_meta('_didit_hold_aml')
+  && !isset($shared->meta['_didit_hold_reasons']), 'reasons live in separate meta keys, never in one shared list');
+$legacy = new Didit_Test_Noted_Order(73);
+$legacy->meta['_didit_hold_reasons'] = ['identity', 'aml'];
+Didit_Verify_Actions::remove_hold_reason($legacy, 'identity');
+check(['aml'] === Didit_Verify_Actions::hold_reasons($legacy), 'reasons recorded by an earlier build are still honoured and cleaned up one by one');
+$locked = new Didit_Test_Noted_Order(74);
+$locked->status = 'on-hold';
+$locked->meta['_didit_held'] = 'yes';
+$opts['didit_hold_lock_74'] = (time() + 30) . '|other-request';
+check(false === Didit_Verify_Actions::release_hold($locked, 'x') && 'on-hold' === $locked->status, 'a release waits for the per-order lock another check holds');
+unset($opts['didit_hold_lock_74']);
+check(true === Didit_Verify_Actions::release_hold($locked, 'x') && !array_key_exists('didit_hold_lock_74', $opts), 'the release decision is taken under the lock and the lock is released');
 $opts['didit_wc_mode'] = '';
 $opts['didit_wc_hold'] = false;
 
@@ -177,6 +276,16 @@ check('+34600000000' === Didit_Verify_Actions::phone_e164('600 000 000', 'ES', '
 check('+14155552671' === Didit_Verify_Actions::phone_e164('(415) 555-2671', 'US', '+1'), 'a US number gets +1');
 check('' === Didit_Verify_Actions::phone_e164('0600 000 000', 'ES', '+34'), 'a leading 0 where none is expected is refused');
 check('' === Didit_Verify_Actions::phone_e164('0612 345 678', 'BR', '+55'), 'a national number from a country without a known rule is refused');
+check('+441534123456' === Didit_Verify_Actions::phone_e164('01534 123456', 'JE', '+441534'), 'a Jersey landline keeps its 1534 once');
+check('+447797123456' === Didit_Verify_Actions::phone_e164('07797 123456', 'JE', '+441534'), 'a Jersey mobile is not given the landline prefix');
+check('+441534123456' === Didit_Verify_Actions::phone_e164('123456', 'JE', '+441534'), 'a Jersey local number gets the island prefix');
+check('+441481234567' === Didit_Verify_Actions::phone_e164('01481 234567', 'GG', '+441481'), 'a Guernsey number keeps its 1481 once');
+check('+441624123456' === Didit_Verify_Actions::phone_e164('01624 123456', 'IM', '+441624'), 'an Isle of Man number keeps its 1624 once');
+check('+17875551234' === Didit_Verify_Actions::phone_e164('787-555-1234', 'PR', ['+1787', '+1939']), 'a Puerto Rico number with its area code gets +1');
+check('' === Didit_Verify_Actions::phone_e164('555-1234', 'PR', ['+1787', '+1939']), 'a 7-digit number is refused where the area code is ambiguous');
+check('+16715551234' === Didit_Verify_Actions::phone_e164('555-1234', 'GU', '+1671'), 'a Guam local number gets its single area code');
+check('+16715551234' === Didit_Verify_Actions::phone_e164('671 555 1234', 'GU', '+1671'), 'a Guam 10-digit number does not repeat the area code');
+check('+390612345678' === Didit_Verify_Actions::phone_e164('06 1234 5678', 'IT', ['+39']), 'Italy still keeps its leading 0 with a list of codes');
 
 function contact($step, array $input, $nonce = 'test-nonce-wp_rest') {
   $request = new Didit_Test_Request(json_encode($input), ['X-WP-Nonce' => $nonce]);
@@ -196,7 +305,9 @@ $GLOBALS['didit_test_current_user'] = 0;
 $_GET['key'] = 'wc_order_testkey';
 $old = new Didit_Test_Noted_Order(25);
 $old->created = new DateTime('-2 hours');
-check('' === Didit_Verify_Actions::contact_box($old), 'a guest with the order key but without WooCommerce email verification sees no contacts');
+$GLOBALS['didit_test_query_vars']['order-received'] = 25;
+check('' === Didit_Verify_Actions::contact_box_block(''), 'a guest whose block confirmation still asks for the email (empty summary) sees no contacts');
+$GLOBALS['didit_test_query_vars'] = [];
 $account = new Didit_Test_Noted_Order(26, ['customer_id' => 7]);
 $account->created = new DateTime();
 check('' === Didit_Verify_Actions::contact_box($account), 'an order placed with an account is hidden from anyone but its logged-in owner');
@@ -209,9 +320,14 @@ $order = new Didit_Test_Noted_Order(30);
 $order->created = new DateTime();
 check('' === Didit_Verify_Actions::contact_box($order), 'a wrong key in the URL shows nothing');
 $_GET['key'] = 'wc_order_testkey';
-$box = Didit_Verify_Actions::contact_box($order);
+$GLOBALS['didit_test_query_vars']['order-received'] = 30;
+$box = Didit_Verify_Actions::contact_box_block('<ul class="summary"></ul>');
+$GLOBALS['didit_test_query_vars'] = [];
 $cfg = $GLOBALS['didit_test_localized_scripts']['didit-contact']['diditContact'];
-check('' !== $box && access_for($order) === $cfg['access'], 'a guest within WooCommerce\'s grace period sees the box and gets an access token');
+check(false !== strpos($box, 'didit-contact-send') && access_for($order) === $cfg['access'],
+  'a guest WooCommerce shows the details to (summary rendered) sees the box and gets an access token');
+check(false === strpos((string) file_get_contents(__DIR__ . '/../includes/class-didit-actions.php'), "get('customer')"),
+  'a matching cart email is never taken as authorization');
 unset($_GET['key']);
 
 $valid = ['order_id' => 30, 'order_key' => 'wc_order_testkey', 'channel' => 'phone', 'access' => $cfg['access']];
@@ -297,11 +413,19 @@ check(is_wp_error($result) && 429 === $result->get_error_data()['status'] && 10 
 check(!array_key_exists('didit_contact_lock', $opts), 'the budget lock is released after each request');
 $GLOBALS['didit_test_transients'] = [];
 $GLOBALS['didit_test_api_posts'] = [];
-$opts['didit_contact_lock'] = (string) time();
+$opts['didit_contact_lock'] = (time() + 30) . '|another-request';
 $result = contact('send', ['order_id' => 31, 'access' => 'test-nonce-didit_contact_31|wc_order_testkey'] + $valid);
 check(is_wp_error($result) && 429 === $result->get_error_data()['status'] && !$GLOBALS['didit_test_api_posts'], 'a request that cannot take the budget lock is refused');
-$opts['didit_contact_lock'] = (string) (time() - 60);
+$opts['didit_contact_lock'] = (time() - 60) . '|crashed-request';
 check(['status' => 'Sent'] === contact('send', ['order_id' => 31, 'access' => 'test-nonce-didit_contact_31|wc_order_testkey'] + $valid), 'a stale lock left by a crashed request is taken over');
+$token = Didit_Verify_Lock::acquire('didit_contact_lock');
+check(false === Didit_Verify_Lock::release('didit_contact_lock', 'crashed-request') && array_key_exists('didit_contact_lock', $opts),
+  'a request whose lock expired cannot release the lock of the request that took it over');
+check(Didit_Verify_Lock::release('didit_contact_lock', $token) && !array_key_exists('didit_contact_lock', $opts), 'the holder releases its own lock');
+$opts['didit_contact_lock'] = (time() - 60) . '|crashed-request';
+$first = Didit_Verify_Lock::acquire('didit_contact_lock');
+check('' !== $first && substr($opts['didit_contact_lock'], -strlen($first)) === $first, 'an expired lock is taken over by replacing its exact old value');
+Didit_Verify_Lock::release('didit_contact_lock', $first);
 unset($opts['didit_contact_lock']);
 
 echo $GLOBALS['didit_test_passed'] . " passed\n";

@@ -203,6 +203,7 @@ final class Didit_Verify_Sign_In
       'no_account' => __('No account here uses this email, and registration is closed.', 'didit-verify'),
       'register_first' => __('Please create your account with the registration form first.', 'didit-verify'),
       'not_allowed' => __('This account cannot sign in here.', 'didit-verify'),
+      'link_first' => __('This account is shared with other sites of this network. Log in with your password and link Didit from your profile first.', 'didit-verify'),
     ];
   }
 
@@ -393,6 +394,11 @@ final class Didit_Verify_Sign_In
       if (is_multisite() && !is_user_member_of_blog($user->ID, get_current_blog_id())) {
         return new WP_Error('not_allowed');
       }
+      // On multisite one account can hold other roles on other sites, and this site's
+      // issuer must not establish that network login by email: the owner links first.
+      if (is_multisite()) {
+        return new WP_Error('link_first');
+      }
       $existing = (string) get_user_meta($user->ID, $key, true);
       if ('' !== $existing && !hash_equals($existing, $link)) {
         return new WP_Error('linked_elsewhere');
@@ -428,11 +434,13 @@ final class Didit_Verify_Sign_In
   /**
    * WordPress's account restrictions for a user about to be signed in.
    *
-   * There is no password here, so the `authenticate` filter is not run: it would invoke
-   * the password handlers. Instead apply what wp_authenticate() enforces around them:
-   * the multisite spam check, membership of this site (super admins excepted), and
-   * `wp_authenticate_user`, the filter plugins use to deny a login (approval, bans,
-   * lockouts). It is passed an empty password; a WP_Error from any step rejects.
+   * The resolved account goes through WordPress's own sign-on pipeline: the
+   * `authenticate` filter receives the WP_User (core's password handlers return an
+   * already-resolved user unchanged; denial, lockout and spam handlers still run), then
+   * `wp_authenticate_user`, the filter plugins use to deny a login (approval, bans).
+   * Both get an empty password. On multisite the spam check and membership of this
+   * site (super admins excepted) are also applied. Any WP_Error, or a different or
+   * missing user, rejects the sign-in before a cookie is issued.
    *
    * @return WP_User|WP_Error
    */
@@ -449,6 +457,10 @@ final class Didit_Verify_Sign_In
       if (!is_super_admin($user->ID) && !is_user_member_of_blog($user->ID, get_current_blog_id())) {
         return new WP_Error('not_allowed');
       }
+    }
+    $authenticated = apply_filters('authenticate', $user, (string) $user->user_login, ''); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core sign-on filter, applied as wp_authenticate() does.
+    if (!is_object($authenticated) || is_wp_error($authenticated) || (int) $authenticated->ID !== (int) $user->ID) {
+      return new WP_Error('not_allowed');
     }
     $filtered = apply_filters('wp_authenticate_user', $user, ''); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core login hook, applied as wp_authenticate_username_password() does.
     if (!is_object($filtered) || is_wp_error($filtered) || (int) $filtered->ID !== (int) $user->ID) {

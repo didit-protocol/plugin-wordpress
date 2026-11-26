@@ -99,6 +99,33 @@ check(3 === count($many['checks']) && ['face_match' => 2] === $many['truncated']
 check(false !== strpos(Didit_Verify_Report::render($many, $id), '2 more results not shown'), 'the admin view says results were left out');
 check(!isset($summary['truncated']), 'nothing is marked as left out when every result fits');
 
+// Location-only and e-signature workflows: the outcome is kept, never coordinates,
+// addresses, signer details, signatures or documents.
+$located = Didit_Verify_Report::summarize(['session_id' => $id, 'status' => 'Approved',
+  'geolocation_checks' => [['node_id' => 'n1', 'status' => 'Approved', 'outcome' => 'verified', 'latitude' => 41.38791, 'longitude' => 2.16992,
+    'country_code' => 'ES', 'city' => 'Secret City', 'parsed_address' => ['street' => 'Secret Street 1'], 'inside_geofence' => true, 'is_mock' => false]],
+  'signatures' => [['id' => 'sig-1', 'status' => 'signed', 'verdict' => 'Approved', 'level' => 'aes',
+    'signer' => ['email' => 'secret@example.com', 'name' => 'Secret Signer'], 'adopted_signature' => ['image' => 'data:secret'],
+    'documents' => [['name' => 'secret-contract.pdf']], 'ip_address' => '203.0.113.9']]]);
+$types = array_column($located['checks'], 'type');
+check(['location', 'signature'] === $types, 'a location-only or e-signature decision produces a report');
+check('Approved' === $located['checks'][0]['status'] && 'verified' === $located['checks'][0]['value'] && 'ES' === $located['checks'][0]['country'],
+  'the location outcome and country are kept');
+check('Approved' === $located['checks'][1]['status'] && 'signed' === $located['checks'][1]['value'], 'the e-signature verdict and signing state are kept');
+$stored = json_encode($located);
+check(false === strpos($stored, '41.38') && false === strpos($stored, '2.169') && false === strpos($stored, 'Secret'),
+  'coordinates and addresses are never stored');
+check(false === strpos($stored, 'secret') && false === strpos($stored, '203.0.113.9'), 'signer details, signatures and documents are never stored');
+$locatedHtml = Didit_Verify_Report::render($located, $id);
+check(false !== strpos($locatedHtml, 'Location') && false !== strpos($locatedHtml, 'E-signature') && false !== strpos($locatedHtml, 'inside the allowed area'),
+  'location and e-signature results have readable labels');
+
+// Business documents beyond the cap inside one result count toward "more results".
+$docs = Didit_Verify_Report::summarize(['session_id' => $id, 'status' => 'Approved',
+  'document_verifications' => [['status' => 'Approved', 'items' => array_fill(0, 8, ['document_type' => 'bank_statement', 'status' => 'Approved'])]]]);
+check(['documents' => 3] === ($docs['truncated'] ?? null), 'nested business documents left out are counted');
+check(false !== strpos(Didit_Verify_Report::render($docs, $id), '3 more results not shown'), 'the admin view says nested documents were left out');
+
 $html = Didit_Verify_Report::render($summary, $id);
 check(false === strpos($html, '<b>Doe</b>') && false !== strpos($html, 'Jane Doe'), 'markup in hit names is removed when stored');
 $hostile = Didit_Verify_Report::render(['checks' => [['type' => 'aml', 'status' => '"><script>', 'hits_total' => 1, 'hits' => [['name' => '<img src=x onerror=1>']]]]]);
@@ -128,7 +155,7 @@ check('Approved' === $result['status'] && 'aml' === get_user_meta(42, '_didit_re
 
 function deliver($type, $status, $timestamp) {
   global $id;
-  $body = json_encode(['session_id' => $id, 'status' => $status, 'timestamp' => $timestamp, 'webhook_type' => $type]);
+  $body = json_encode(['session_id' => $id, 'session_kind' => 'user', 'status' => $status, 'timestamp' => $timestamp, 'webhook_type' => $type]);
   return Didit_Verify::init()->rest_webhook(new Didit_Test_Request($body, [
     'X-Signature' => hash_hmac('sha256', $body, 'test-only-webhook-secret'),
   ]));

@@ -159,7 +159,10 @@ final class Didit_Verify_Placements
     ) {
       return false;
     }
-    return $confirm ? 'Approved' === $plugin->confirm_session($session_id) : 'Approved' === ($record['status'] ?? '');
+    // confirm_session() returns what the session grants, so a company approval of a
+    // registration workflow creates no account; the stored path checks the same.
+    return $confirm ? 'Approved' === $plugin->confirm_session($session_id)
+      : 'Approved' === $plugin->grant_status($record, $plugin->normalize_status($record['status'] ?? ''), 'registration');
   }
 
   public static function registration_errors($errors, $login = '', $email = '')
@@ -251,8 +254,8 @@ final class Didit_Verify_Placements
   {
     $workflow_id = Didit_Verify_Workflows::workflow_for('product_gate');
     $user_id = get_current_user_id();
-    return ($user_id && self::$plugin->user_has_workflow_approval($user_id, $workflow_id))
-      || self::$plugin->visitor_has_workflow_approval($workflow_id);
+    return ($user_id && self::$plugin->user_has_workflow_approval($user_id, $workflow_id, 'product_gate'))
+      || self::$plugin->visitor_has_workflow_approval($workflow_id, 'product_gate');
   }
 
   private static function gate_message(): string
@@ -386,14 +389,16 @@ final class Didit_Verify_Placements
     echo '<div class="didit-account">';
     if (Didit_Verify_Workflows::is_enabled('my_account')) {
       // The status of the workflow this tab runs, not of an age or checkout check.
-      $status = $plugin->user_workflow_status($user_id, Didit_Verify_Workflows::workflow_for('my_account'));
+      $status = $plugin->user_workflow_status($user_id, Didit_Verify_Workflows::workflow_for('my_account'), 'my_account');
       printf('<h3>%s</h3><p>%s <strong>%s</strong></p>', esc_html__('Identity', 'didit-verify'), esc_html__('Status:', 'didit-verify'), esc_html(self::customer_status_text($status)));
       if ('In Review' !== $status) {
         echo $plugin->render_shortcode(['placement' => 'my_account', 'text' => self::action_text($status, __('Verify your Identity', 'didit-verify'))]); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
       }
     }
     if (Didit_Verify_Workflows::is_enabled('business')) {
-      $status = (string) get_user_meta($user_id, '_didit_kyb_status', true);
+      // The current business workflow's own status, confirmed as a company decision: a
+      // stricter workflow chosen later is not shown as passed by an older approval.
+      $status = $plugin->user_workflow_status($user_id, Didit_Verify_Workflows::workflow_for('business'), 'business');
       printf(
         '<h3>%s</h3><p>%s</p><p>%s <strong>%s</strong></p>',
         esc_html__('Business account', 'didit-verify'),

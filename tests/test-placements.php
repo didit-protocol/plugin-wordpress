@@ -25,16 +25,14 @@ $GLOBALS['didit_test_post_response'] = function ($url, $args) {
   $n = count($GLOBALS['didit_test_created']) + 1;
   $id = sprintf('%08x-2222-4222-8222-%012x', $n, $n);
   $GLOBALS['didit_test_created'][] = ['id' => $id, 'body' => json_decode($args['body'], true)];
-  return ['response' => ['code' => 201], 'body' => json_encode(['session_id' => $id, 'url' => 'https://verify.didit.me/session/' . $id])];
+  return ['response' => ['code' => 201], 'body' => json_encode(['session_id' => $id, 'session_kind' => 'user', 'url' => 'https://verify.didit.me/session/' . $id])];
 };
 $GLOBALS['didit_remote_status'] = [];
 $GLOBALS['didit_test_api_response'] = function ($url) {
   preg_match('#/session/([^/]+)/decision/#', $url, $m);
   $id = rawurldecode($m[1] ?? '');
   $decision = ['session_id' => $id, 'status' => $GLOBALS['didit_remote_status'][$id] ?? 'Not Started'];
-  if (isset($GLOBALS['didit_remote_kind'][$id])) {
-    $decision['session_kind'] = $GLOBALS['didit_remote_kind'][$id];
-  }
+  $decision['session_kind'] = $GLOBALS['didit_remote_kind'][$id] ?? 'user';
   return ['response' => ['code' => 200], 'body' => json_encode($decision)];
 };
 function start(array $input) {
@@ -97,6 +95,7 @@ $kyb = start(['placement' => 'business']);
 check('wf-kyb' === last_body()['workflow_id'] && $kyb['sessionId'] === get_user_meta(42, '_didit_kyb_pending_session_id'),
   'a business check runs the KYB workflow and is tracked apart');
 $GLOBALS['didit_remote_status'][$kyb['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$kyb['sessionId']] = 'business';
 $plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $kyb['sessionId']])));
 check('Approved' === get_user_meta(42, '_didit_kyb_status'), 'the business approval is recorded as KYB status');
 check(!$plugin->is_user_verified(42), 'a business approval does not mark the person as identity verified');
@@ -229,7 +228,7 @@ $plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'c
 check('Approved' !== get_user_meta(42, '_didit_kyb_status'), 'a personal decision does not mark the company verified');
 $GLOBALS['didit_test_transients'][Didit_Verify_Workflows::CACHE_KEY] = [['id' => 'wf-kyb', 'type' => 'kyb'], ['id' => 'wf-id', 'type' => 'kyc']];
 check(['business' => 'wf-kyb', 'registration' => 'wf-id'] == Didit_Verify_Workflows::sanitize_map(['business' => 'wf-kyb', 'registration' => 'wf-id', 'checkout' => 'wf-kyb'])
-  && [] === Didit_Verify_Workflows::sanitize_map(['business' => 'wf-id']), 'a workflow of the wrong type is not saved for a placement');
+  && ['business' => 'wf-kyb'] === Didit_Verify_Workflows::sanitize_map(['business' => 'wf-id']), 'a workflow of the wrong type is not saved for a placement, and the previous choice stays');
 
 // WooCommerce's own registration settings open the registration placement to guests.
 $opts['users_can_register'] = false;
@@ -244,5 +243,96 @@ check(!Didit_Verify_Placements::guest_may_start(['placement' => 'my_account']), 
 
 $source = file_get_contents(__DIR__ . '/../includes/class-didit-placements.php');
 check(false !== strpos($source, "'add_option_' . \$option"), 'the first save of the account tab switches also refreshes the endpoints');
+
+// ── Fix round of 26 Nov ──
+$GLOBALS['didit_test_current_user'] = 0;
+$opts['didit_require_login'] = true;
+$_COOKIE['didit_verification_owner'] = str_repeat('7', 64);
+$opts['didit_placements'] = ['registration' => 'wf-id', 'product_gate' => 'wf-age', 'business' => 'wf-kyb'];
+$opts['users_can_register'] = true;
+$opts['didit_registration_enabled'] = true;
+
+// Guest confirmation is decided by the stored placement, never by the request.
+$GLOBALS['didit_test_current_user'] = 42;
+$acct = start(['placement' => 'my_account']);
+$GLOBALS['didit_test_current_user'] = 0;
+$stored = $plugin->stored_session($acct['sessionId']);
+$stored['user_id'] = 0;
+$plugin->store_session($acct['sessionId'], $stored);
+$claim = new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $acct['sessionId'], 'placement' => 'registration']), ['X-WP-Nonce' => 'test-nonce-wp_rest']);
+$allowed = $plugin->rest_check_verify_permission($claim);
+check(is_wp_error($allowed) && 401 === $allowed->get_error_data()['status'], 'a guest naming a guest placement cannot confirm a session whose stored placement needs login');
+$reg = start(['placement' => 'registration']);
+check(true === $plugin->rest_check_verify_permission(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $reg['sessionId']]), ['X-WP-Nonce' => 'test-nonce-wp_rest'])),
+  'a guest can confirm the registration session this browser started');
+
+// A company decision never creates a personal account, whatever the registration workflow is.
+$GLOBALS['didit_remote_status'][$reg['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$reg['sessionId']] = 'business';
+check('Declined' === $plugin->confirm_session($reg['sessionId']), 'confirming a company approval for registration reports what it grants (Declined)');
+check(!Didit_Verify_Placements::registration_session_is_approved($reg['sessionId'], true) && !Didit_Verify_Placements::registration_session_is_approved($reg['sessionId'], false),
+  'a company approval does not pass registration on either validation path');
+
+// An approval counts only for the kind of subject the consuming placement needs.
+$GLOBALS['didit_test_current_user'] = 55;
+$_COOKIE['didit_verification_owner'] = str_repeat('8', 64);
+$opts['didit_placements'] = ['product_gate' => 'wf-shared', 'business' => 'wf-shared'];
+$biz = start(['placement' => 'business']);
+$GLOBALS['didit_remote_status'][$biz['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$biz['sessionId']] = 'business';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $biz['sessionId']])));
+check($plugin->user_has_workflow_approval(55, 'wf-shared', 'business'), 'the company approval counts for the business placement');
+check(!$plugin->user_has_workflow_approval(55, 'wf-shared', 'product_gate') && !Didit_Verify_Placements::visitor_is_approved(),
+  'the company approval does not open a personal age gate sharing its workflow');
+
+// A decision that does not say which kind of subject it verified grants nothing.
+$opts['didit_placements'] = ['product_gate' => 'wf-age'];
+$unknown = start(['placement' => 'product_gate']);
+$GLOBALS['didit_remote_status'][$unknown['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$unknown['sessionId']] = '';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $unknown['sessionId']])));
+check(!$plugin->user_has_workflow_approval(55, 'wf-age', 'product_gate'), 'an approval of unknown subject kind grants nothing');
+
+// The business tab reads the current business workflow, not the last KYB status.
+$GLOBALS['didit_test_current_user'] = 56;
+$_COOKIE['didit_verification_owner'] = str_repeat('9', 64);
+$opts['didit_placements'] = ['business' => 'wf-kyb-light'];
+$light = start(['placement' => 'business']);
+$GLOBALS['didit_remote_status'][$light['sessionId']] = 'Approved';
+$GLOBALS['didit_remote_kind'][$light['sessionId']] = 'business';
+$plugin->rest_save_verification(new Didit_Test_Request(json_encode(['type' => 'completed', 'sessionId' => $light['sessionId']])));
+ob_start(); Didit_Verify_Placements::account_tab(); $tab = ob_get_clean();
+check(false !== strpos($tab, 'Verified'), 'the business tab shows the approval of its workflow');
+$opts['didit_placements'] = ['business' => 'wf-kyb-strict'];
+ob_start(); Didit_Verify_Placements::account_tab(); $tab = ob_get_clean();
+check(false === strpos($tab, '<strong>Verified') && false !== strpos($tab, 'data-placement="business"'),
+  'after a switch to a stricter KYB workflow the tab is not "Verified" and offers the check again');
+
+// "Continue verification" reopens the session waiting for the customer, per placement.
+$GLOBALS['didit_test_current_user'] = 57;
+$_COOKIE['didit_verification_owner'] = str_repeat('1', 64);
+$opts['didit_placements'] = ['product_gate' => 'wf-age', 'business' => 'wf-kyb'];
+$waiting = start(['placement' => 'business']);
+$GLOBALS['didit_remote_status'][$waiting['sessionId']] = 'In Progress';
+start(['placement' => 'product_gate']);
+$GLOBALS['didit_remote_status'][$waiting['sessionId']] = 'Resubmitted';
+$count = count($GLOBALS['didit_test_created']);
+$again = start(['placement' => 'business']);
+check($again['sessionId'] === $waiting['sessionId'] && count($GLOBALS['didit_test_created']) === $count,
+  'continuing a business check reopens its session after another placement started');
+
+// Completion hooks fire once when browser and webhook confirm the same decision together.
+$both = start(['placement' => 'product_gate']);
+$seen = $plugin->stored_session($both['sessionId']);
+$seen['status'] = 'In Review';
+$plugin->store_session($both['sessionId'], $seen);
+$GLOBALS['didit_test_actions'] = [];
+$stale = $plugin->stored_session($both['sessionId']);
+$stale['session_kind'] = 'user';
+$plugin->apply_confirmed_status($both['sessionId'], $stale, 'Approved', time());
+$plugin->apply_confirmed_status($both['sessionId'], $stale, 'Approved', time());
+$hooks = array_filter($GLOBALS['didit_test_actions'], function ($a) { return 'didit_verification_completed' === $a[0]; });
+check(1 === count($hooks), 'two requests that read the same earlier status fire the completion hook once');
+check(!isset($GLOBALS['didit_test_options']['didit_session_lock_' . substr(hash('sha256', $both['sessionId']), 0, 32)]), 'the session lock is released');
 
 echo $GLOBALS['didit_test_passed'] . " passed\n";

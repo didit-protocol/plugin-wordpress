@@ -29,6 +29,9 @@ class Didit_Test_Wpdb {
     if (false !== strpos($query, 'wp_comments') && false !== strpos($query, "'_didit_result_note'") && false !== strpos($query, "'order_note'")) {
       return ['501', '502'];
     }
+    if (false !== strpos($query, 'wp_comments') && false !== strpos($query, "comment_author = 'WooCommerce'") && false !== strpos($query, "'Didit:%'")) {
+      return ['502', '503'];
+    }
     if (false !== strpos($query, 'wp_usermeta') && false !== strpos($query, 'auth\_link\_')) {
       return ['_didit_auth_link_1_abc'];
     }
@@ -51,7 +54,9 @@ $unscheduled = $GLOBALS['didit_test_unscheduled'];
 check(in_array(['wp', 'didit_aml_screen_order'], $unscheduled, true), 'WP-Cron AML events scheduled with an order ID are removed hook-wide');
 check(in_array(['wp', 'didit_wc_verification_reminder'], $unscheduled, true), 'WP-Cron reminders scheduled with an order ID are removed hook-wide');
 check(in_array(['as', 'didit_aml_screen_order'], $unscheduled, true), 'Action Scheduler AML jobs are removed');
-check([501, 502] === $GLOBALS['didit_test_deleted_comments'], 'only the order notes marked as Didit results are deleted');
+check([501, 502, 503] === $GLOBALS['didit_test_deleted_comments'], 'marked result notes and unmarked notes of earlier versions are deleted, each once');
+$legacy_query = implode("\n", array_filter($GLOBALS['wpdb']->queries, function ($q) { return false !== strpos($q, "'Didit:%'"); }));
+check(false !== strpos($legacy_query, "comment_author = 'WooCommerce'"), 'only system notes are taken as notes of earlier versions, never a person\'s note');
 check(!array_key_exists('didit_aml_enabled', $GLOBALS['didit_test_options']) && !array_key_exists('didit_registration_xyz', $GLOBALS['didit_test_options']),
   'settings and registration records are deleted');
 $meta = array_column($GLOBALS['didit_test_deleted_metadata'], 1);
