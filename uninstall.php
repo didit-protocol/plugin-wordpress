@@ -106,6 +106,7 @@ $didit_user_meta_keys = [
 	'_didit_kyb_report',
 	'_didit_auth_sub',
 	'_didit_workflow_sessions',
+	'_didit_placement_sessions',
 ];
 // Sign-in links are stored per site and issuer under keys starting with _didit_auth_link_.
 $didit_user_meta_keys = array_merge( $didit_user_meta_keys, (array) $wpdb->get_col( $wpdb->prepare(

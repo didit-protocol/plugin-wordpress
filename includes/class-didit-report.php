@@ -4,9 +4,10 @@
  *
  * Only what an admin needs to act on is kept: each check's status and score, AML hit
  * names and monitoring state, contact results, the age and the document described by
- * type, subtype and country, and the status of additional documents and questionnaires.
- * Images, document files, questionnaire answers, raw payloads, data source names and
- * registry document names are never stored. Beyond MAX_ITEMS results of one kind only
+ * type, subtype and country, the status of additional documents and questionnaires, the
+ * location outcome and country, and the e-signature verdict and level. Images, document
+ * files, questionnaire answers, coordinates, signer details, signatures, raw payloads,
+ * data source names and registry document names are never stored. Beyond MAX_ITEMS results of one kind only
  * the number left out is kept.
  */
 
@@ -145,7 +146,12 @@ final class Didit_Verify_Report
     // File links and extracted text are never kept.
     foreach (self::items($decision, 'document_verifications', 'documents', $truncated) as $item) {
       $flags = [];
-      foreach (array_slice(is_array($item['items'] ?? null) ? array_values(array_filter($item['items'], 'is_array')) : [], 0, self::MAX_HITS) as $doc) {
+      $docs = is_array($item['items'] ?? null) ? array_values(array_filter($item['items'], 'is_array')) : [];
+      if (count($docs) > self::MAX_HITS) {
+        // Documents left out inside one result count toward the same "more results" line.
+        $truncated['documents'] = ($truncated['documents'] ?? 0) + count($docs) - self::MAX_HITS;
+      }
+      foreach (array_slice($docs, 0, self::MAX_HITS) as $doc) {
         $flags[] = trim(self::label($doc['document_type'] ?? '') . ': ' . self::text($doc['status'] ?? ''), ': ');
       }
       foreach (is_array($item['groups'] ?? null) ? $item['groups'] : [] as $group => $counts) {
@@ -169,6 +175,35 @@ final class Didit_Verify_Report
         'type' => 'questionnaire',
         'status' => self::text($item['status'] ?? ''),
         'value' => self::text($item['title'] ?? ''),
+      ], [__CLASS__, 'keep']);
+    }
+
+    // Location: the outcome, the country and whether the area rules passed. Coordinates,
+    // addresses, distances and device details are never kept.
+    foreach (self::items($decision, 'geolocation_checks', 'location', $truncated) as $item) {
+      $inside = $item['inside_geofence'] ?? null;
+      $summary['checks'][] = array_filter([
+        'type' => 'location',
+        'status' => self::text($item['status'] ?? ''),
+        'value' => self::label($item['outcome'] ?? ''),
+        'country' => self::text($item['country_code'] ?? ''),
+        'flags' => array_values(array_filter([
+          true === $inside ? __('inside the allowed area', 'didit-verify') : '',
+          false === $inside ? __('outside the allowed area', 'didit-verify') : '',
+          !empty($item['is_mock']) ? __('mock location', 'didit-verify') : '',
+        ])),
+      ], [__CLASS__, 'keep']);
+    }
+    // E-signature: the step's verdict, where the signer is and the signature level. The
+    // signer, the signature image, the documents and the certificate are never kept.
+    foreach (self::items($decision, 'signatures', 'signature', $truncated) as $item) {
+      $summary['checks'][] = array_filter([
+        'type' => 'signature',
+        'status' => self::text($item['verdict'] ?? ''),
+        'value' => self::label($item['status'] ?? ''),
+        'flags' => array_values(array_filter([
+          ['simple' => __('simple signature', 'didit-verify'), 'aes' => __('advanced signature (AES)', 'didit-verify'), 'qes' => __('qualified signature (QES)', 'didit-verify')][$item['level'] ?? ''] ?? '',
+        ])),
       ], [__CLASS__, 'keep']);
     }
 
@@ -276,6 +311,8 @@ final class Didit_Verify_Report
       'documents' => __('Business documents', 'didit-verify'),
       'document_ai' => __('Additional documents', 'didit-verify'),
       'questionnaire' => __('Questionnaire', 'didit-verify'),
+      'location' => __('Location', 'didit-verify'),
+      'signature' => __('E-signature', 'didit-verify'),
     ];
     return $labels[$type] ?? $type;
   }

@@ -69,29 +69,56 @@ final class Didit_Verify_Workflows
   public static function sanitize_map($value): array
   {
     $clean = [];
+    // A rejected choice keeps the placement's previous workflow: falling back to the
+    // default Workflow ID could silently run a weaker check than the admin required.
+    $previous = get_option(self::OPTION, []);
+    $previous = is_array($previous) ? $previous : [];
+    $keep = function (string $placement) use (&$clean, $previous) {
+      if (isset($previous[$placement]) && '' !== (string) $previous[$placement]) {
+        $clean[$placement] = (string) $previous[$placement];
+      }
+    };
     if (!is_array($value)) {
-      return $clean;
+      return $previous;
     }
     foreach (array_keys(self::PLACEMENTS) as $placement) {
       $id = isset($value[$placement]) ? trim((string) $value[$placement]) : '';
-      if ('' === $id || !preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
+      if ('' === $id) {
         continue;
       }
-      // Business customers need a KYB workflow; every other placement verifies a person.
-      $type = self::type_of($id);
-      if ('' !== $type && ('business' === $placement) !== ('kyb' === $type)) {
+      if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id)) {
         if (function_exists('add_settings_error')) {
-          add_settings_error(self::OPTION, 'didit_workflow_type_' . $placement, sprintf(
+          add_settings_error(self::OPTION, 'didit_workflow_id_' . $placement, sprintf(
             /* translators: %s: placement name. */
-            __('%s: choose a workflow of the matching type (KYB for business customers, KYC everywhere else).', 'didit-verify'),
+            __('%s: that is not a valid Workflow ID. The previous choice is kept.', 'didit-verify'),
             self::placement_labels()[$placement]
           ));
         }
+        $keep($placement);
+        continue;
+      }
+      // Business customers need a KYB workflow; every other placement verifies a person.
+      if (!self::fits($placement, $id)) {
+        if (function_exists('add_settings_error')) {
+          add_settings_error(self::OPTION, 'didit_workflow_type_' . $placement, sprintf(
+            /* translators: %s: placement name. */
+            __('%s: choose a workflow of the matching type (KYB for business customers, KYC everywhere else). The previous choice is kept.', 'didit-verify'),
+            self::placement_labels()[$placement]
+          ));
+        }
+        $keep($placement);
         continue;
       }
       $clean[$placement] = $id;
     }
     return $clean;
+  }
+
+  /** Whether a workflow's type suits a placement. A workflow not in the catalogue is accepted. */
+  public static function fits(string $placement, string $workflow_id): bool
+  {
+    $type = self::type_of($workflow_id);
+    return '' === $type || ('business' === $placement) === ('kyb' === $type);
   }
 
   /** 'kyc' or 'kyb' for a workflow in the cached catalogue, '' when unknown. */
@@ -270,6 +297,10 @@ final class Didit_Verify_Workflows
         printf('<option value="">%s</option>', esc_html__('Default Workflow ID', 'didit-verify'));
         $known = false;
         foreach ($workflows as $workflow) {
+          // Only workflows of the matching type: KYB for business customers, KYC elsewhere.
+          if (('business' === $placement) !== ('kyb' === $workflow['type'])) {
+            continue;
+          }
           $known = $known || $workflow['id'] === $current;
           printf(
             '<option value="%s" %s>%s</option>',

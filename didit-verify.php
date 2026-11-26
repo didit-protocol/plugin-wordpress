@@ -1267,6 +1267,12 @@ final class Didit_Verify
     if ($user_id) {
       // A business check never stands in for the person's own identity check.
       update_user_meta($user_id, 'business' === $placement ? '_didit_kyb_pending_session_id' : '_didit_pending_session_id', $session_id);
+      // The account's latest session per placement, so "Continue verification" reopens
+      // the session waiting for this customer even after they started another check.
+      $by_placement = get_user_meta($user_id, '_didit_placement_sessions', true);
+      $by_placement = is_array($by_placement) ? $by_placement : [];
+      $by_placement[$placement] = $session_id;
+      update_user_meta($user_id, '_didit_placement_sessions', $by_placement);
     }
 
     if ($order) {
@@ -1358,11 +1364,21 @@ final class Didit_Verify
     }
     if ($order) {
       $candidates[] = (string) $order->get_meta('_didit_session_id');
+    } elseif ('' !== $placement && is_user_logged_in()) {
+      $by_placement = get_user_meta(get_current_user_id(), '_didit_placement_sessions', true);
+      $candidates[] = is_array($by_placement) ? (string) ($by_placement[$placement] ?? '') : '';
     }
 
     foreach (array_unique(array_filter($candidates)) as $session_id) {
       $record = $this->stored_session($session_id);
-      if (!is_array($record) || !$this->session_belongs_to_request($record, $order) || !$this->status_is_open((string) ($record['status'] ?? ''))) {
+      if (!is_array($record) || !$this->status_is_open((string) ($record['status'] ?? ''))) {
+        continue;
+      }
+      // The browser that started it, or the signed-in account that owns it (a reviewer's
+      // resubmission request can reach the customer on another device).
+      $owned = $this->session_belongs_to_request($record, $order)
+        || (!$order && is_user_logged_in() && empty($record['order_id']) && (int) ($record['user_id'] ?? 0) === get_current_user_id());
+      if (!$owned) {
         continue;
       }
       // A session of another workflow cannot finish this placement's check, and one
@@ -1505,10 +1521,37 @@ final class Didit_Verify
   /**
    * Record a decision Didit confirmed, on the session, its user and its order.
    *
+   * Browser confirmation and the webhook can arrive together, so the transition is made
+   * under a per-session lock against the record as stored now, not as each request read
+   * it before calling Didit: only the request that changes the status fires the hooks.
+   *
    * @param array|null $report Didit_Verify_Report summary of the decision, when fetched.
+   * @return bool false when the session stayed locked and nothing was recorded.
    */
-  public function apply_confirmed_status($session_id, array $record, string $status, int $timestamp, $report = null)
+  public function apply_confirmed_status($session_id, array $record, string $status, int $timestamp, $report = null): bool
   {
+    $lock = 'didit_session_lock_' . substr(hash('sha256', (string) $session_id), 0, 32);
+    $token = Didit_Verify_Lock::acquire($lock, 30);
+    if ('' === $token) {
+      return false;
+    }
+    $this->apply_status_locked((string) $session_id, $record, $status, $timestamp, $report);
+    Didit_Verify_Lock::release($lock, $token);
+    return true;
+  }
+
+  private function apply_status_locked(string $session_id, array $record, string $status, int $timestamp, $report)
+  {
+    $stored = $this->stored_session($session_id);
+    if (is_array($stored)) {
+      // Facts the caller just read from the decision join the stored record.
+      foreach (['workflow_id', 'session_kind', 'workflow_lookup_at'] as $fact) {
+        if (!empty($record[$fact])) {
+          $stored[$fact] = $record[$fact];
+        }
+      }
+      $record = $stored;
+    }
     $previous = (int) ($record['event_timestamp'] ?? 0);
     if ($timestamp < $previous) {
       return;
@@ -1525,7 +1568,7 @@ final class Didit_Verify
     $user_id = (int) $record['user_id'];
     // A decision about the wrong kind of subject (a company where a person was asked
     // for, or the reverse) grants nothing; it can still revoke what this session granted.
-    $grant_status = $this->record_kind_matches($record) ? $status : ('Approved' === $status ? 'Declined' : $status);
+    $grant_status = $this->grant_status($record, $status);
     if ($user_id) {
       $this->remember_workflow_session($user_id, $this->record_workflow($record), $session_id);
     }
@@ -1599,12 +1642,12 @@ final class Didit_Verify
    * workflow stands, otherwise the status of their latest session of it ('' if none).
    * An approval of another workflow, such as an age check, says nothing here.
    */
-  public function user_workflow_status(int $user_id, string $workflow_id): string
+  public function user_workflow_status(int $user_id, string $workflow_id, string $placement = 'default'): string
   {
     if (!$user_id || '' === $workflow_id) {
       return '';
     }
-    if ($this->user_has_workflow_approval($user_id, $workflow_id)) {
+    if ($this->user_has_workflow_approval($user_id, $workflow_id, $placement)) {
       return 'Approved';
     }
     $map = get_user_meta($user_id, '_didit_workflow_sessions', true);
@@ -1614,7 +1657,7 @@ final class Didit_Verify
       return '';
     }
     $status = $this->normalize_status($record['status'] ?? '');
-    return 'Approved' === $status || !$this->record_kind_matches($record) ? '' : $status;
+    return 'Approved' === $status || !$this->record_kind_matches($record, $placement, false) ? '' : $status;
   }
 
   /**
@@ -1669,23 +1712,28 @@ final class Didit_Verify
   }
 
   /** Whether a confirmed Didit decision of this workflow currently approves the user. */
-  public function user_has_workflow_approval(int $user_id, string $workflow_id): bool
+  /**
+   * Whether a confirmed Didit decision of this workflow currently approves the user, for
+   * the placement that asks ($placement decides whether a person or a company is needed).
+   */
+  public function user_has_workflow_approval(int $user_id, string $workflow_id, string $placement = 'default'): bool
   {
     if (!$user_id || '' === $workflow_id) {
       return false;
     }
     $map = get_user_meta($user_id, '_didit_approved_workflows', true);
     $session_id = is_array($map) ? (string) ($map[$workflow_id] ?? '') : '';
-    if ($session_id && $this->record_approves($session_id, $this->stored_session($session_id), $workflow_id, $user_id)) {
+    if ($session_id && $this->record_approves($session_id, $this->stored_session($session_id), $workflow_id, $user_id, $placement)) {
       return true;
     }
     // Approvals recorded before 0.4.0 count for the workflow Didit says they ran.
     $legacy = (string) get_user_meta($user_id, '_didit_confirmed_session_id', true);
-    return $legacy && $this->is_user_verified($user_id) && $this->record_approves($legacy, $this->stored_session($legacy), $workflow_id, $user_id);
+    return $legacy && $this->record_approves($legacy, $this->stored_session($legacy), $workflow_id, $user_id, $placement)
+      && $this->is_user_verified($user_id);
   }
 
   /** Whether this browser holds an approval of the workflow, for visitors without an account. */
-  public function visitor_has_workflow_approval(string $workflow_id): bool
+  public function visitor_has_workflow_approval(string $workflow_id, string $placement = 'default'): bool
   {
     $owner = $this->verification_owner();
     if ('' === $owner || '' === $workflow_id) {
@@ -1695,20 +1743,28 @@ final class Didit_Verify
     $candidates = [is_array($map) ? (string) ($map[$workflow_id] ?? '') : '', (string) get_option($this->resume_key($owner), '')];
     foreach (array_unique(array_filter($candidates)) as $session_id) {
       $record = $this->stored_session($session_id);
-      if ($this->session_belongs_to_request($record) && $this->record_approves($session_id, $record, $workflow_id, (int) ($record['user_id'] ?? 0))) {
+      if ($this->session_belongs_to_request($record) && $this->record_approves($session_id, $record, $workflow_id, (int) ($record['user_id'] ?? 0), $placement)) {
         return true;
       }
     }
     return false;
   }
 
-  private function record_approves(string $session_id, $record, string $workflow_id, int $user_id): bool
+  /**
+   * The workflow is resolved first: for a session created before 0.4.0 that also records
+   * Didit's current decision, which is then the one judged.
+   */
+  private function record_approves(string $session_id, $record, string $workflow_id, int $user_id, string $placement): bool
   {
+    if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== $user_id
+      || $this->session_workflow($session_id, $record) !== $workflow_id) {
+      return false;
+    }
+    $record = $this->stored_session($session_id);
     return is_array($record)
       && (int) ($record['user_id'] ?? 0) === $user_id
       && 'Approved' === $this->normalize_status($record['status'] ?? '')
-      && $this->record_kind_matches($record)
-      && $this->session_workflow($session_id, $record) === $workflow_id;
+      && $this->record_kind_matches($record, $placement);
   }
 
   public function confirmed_user_status($user_id): string
@@ -1723,7 +1779,8 @@ final class Didit_Verify
     if (!is_array($record) || (int) ($record['user_id'] ?? 0) !== (int) $user_id) {
       return '';
     }
-    return $this->normalize_status($record['status'] ?? '');
+    // A person's status: a company decision, or one of unknown kind, never approves.
+    return $this->grant_status($record, $this->normalize_status($record['status'] ?? ''), 'default');
   }
 
   public function is_user_verified($user_id): bool
@@ -1757,7 +1814,7 @@ final class Didit_Verify
       || $this->session_workflow((string) $session_id, $record) !== $workflow_id) {
       return false;
     }
-    return 'Approved' === $this->confirm_session($session_id) && $this->record_kind_matches($this->stored_session($session_id));
+    return 'Approved' === $this->confirm_session($session_id) && $this->record_kind_matches($this->stored_session($session_id), 'checkout');
   }
 
   private function attach_checkout_session($order, $session_id)
@@ -1971,25 +2028,25 @@ final class Didit_Verify
     // under every signature variant.
     // The fetched decision is newer than any delivery, so its status and report are
     // recorded together: an approval delivered after a reviewer declined stays declined.
+    // Without an API key no decision can be read: revocations still apply from the
+    // envelope, nothing is granted, and the 503 makes Didit retry once a key is set.
     $report = null;
-    if ('data.updated' === $type || get_option('didit_api_key', '')) {
-      $decision = $this->fetch_decision($session_id);
-      if (!is_wp_error($decision)) {
-        $report = Didit_Verify_Report::summarize($decision);
-        $status = $decision['status'];
-        $record = $this->with_decision_facts($record, $decision);
-      } else {
-        // Revoking access is always safe to apply from the signed envelope; granting it
-        // waits for the decision. Either way Didit retries the delivery, which fetches the
-        // report again, so neither a stale nor a missing report is left behind.
-        if ('status.updated' === $type && $status && 'Approved' !== $status) {
-          $this->apply_confirmed_status($session_id, $record, $status, $timestamp);
-        }
-        return new WP_Error('didit_decision_unavailable', __('Unable to read the decision. Retry later.', 'didit-verify'), ['status' => 503]);
+    $decision = $this->fetch_decision($session_id);
+    if (!is_wp_error($decision)) {
+      $report = Didit_Verify_Report::summarize($decision);
+      $status = $decision['status'];
+      $record = $this->with_decision_facts($record, $decision);
+    } else {
+      // Revoking access is always safe to apply from the signed envelope; granting it
+      // waits for the decision. Either way Didit retries the delivery, which fetches the
+      // report again, so neither a stale nor a missing report is left behind.
+      if ('status.updated' === $type && $status && 'Approved' !== $status) {
+        $this->apply_confirmed_status($session_id, $record, $status, $timestamp);
       }
+      return new WP_Error('didit_decision_unavailable', __('Unable to read the decision. Retry later.', 'didit-verify'), ['status' => 503]);
     }
-    if ($status) {
-      $this->apply_confirmed_status($session_id, $record, $status, $timestamp, $report);
+    if ($status && !$this->apply_confirmed_status($session_id, $record, $status, $timestamp, $report)) {
+      return new WP_Error('didit_decision_busy', __('Unable to read the decision. Retry later.', 'didit-verify'), ['status' => 503]);
     }
 
     return rest_ensure_response(['received' => true]);
@@ -2892,7 +2949,7 @@ final class Didit_Verify
     global $wpdb;
     $keys = [
       '_didit_confirmed_session_id', '_didit_pending_session_id', '_didit_verified', '_didit_session_id', '_didit_status',
-      '_didit_verified_at', Didit_Verify_Report::META, '_didit_approved_workflows', '_didit_workflow_sessions',
+      '_didit_verified_at', Didit_Verify_Report::META, '_didit_approved_workflows', '_didit_workflow_sessions', '_didit_placement_sessions',
       '_didit_kyb_pending_session_id', '_didit_kyb_session_id', '_didit_kyb_status', '_didit_kyb_verified_at', '_didit_kyb_report',
       Didit_Verify_Sign_In::LEGACY_META, Didit_Verify_Sign_In::link_meta_key(),
     ];

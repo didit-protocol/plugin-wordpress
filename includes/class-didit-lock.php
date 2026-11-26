@@ -18,7 +18,7 @@ class Didit_Verify_Lock
   public static function acquire(string $name, int $ttl = 30): string
   {
     for ($i = 0; $i < 20; $i++) {
-      $token = wp_generate_password(20, false, false);
+      $token = bin2hex(random_bytes(10));
       $value = (time() + $ttl) . '|' . $token;
       if (self::insert($name, $value)) {
         return $token;
