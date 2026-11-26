@@ -123,8 +123,16 @@ $didit_note_ids = $wpdb->get_col( $wpdb->prepare(
 	'order_note',
 	'_didit_result_note'
 ) );
-foreach ( $didit_note_ids as $didit_note_id ) {
-	wp_delete_comment( (int) $didit_note_id, true );
+// Versions before 0.4.0 did not mark their notes: system notes (author WooCommerce, never
+// a person) starting with the plugin's untranslated "Didit:" prefix.
+$didit_note_ids = array_merge( $didit_note_ids, (array) $wpdb->get_col( $wpdb->prepare(
+	"SELECT comment_ID FROM {$wpdb->comments} WHERE comment_type = %s AND comment_author = %s AND comment_content LIKE %s",
+	'order_note',
+	'WooCommerce',
+	$wpdb->esc_like( 'Didit:' ) . '%'
+) ) );
+foreach ( array_unique( array_map( 'intval', $didit_note_ids ) ) as $didit_note_id ) {
+	wp_delete_comment( $didit_note_id, true );
 }
 
 // Verification results stored on orders and products, with and without WooCommerce order tables.

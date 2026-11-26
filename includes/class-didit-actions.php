@@ -298,14 +298,36 @@ final class Didit_Verify_Actions
       'fields' => 'ids',
       'number' => 0,
     ]);
+    // Versions before 0.4.0 did not mark their notes. Those are system notes (not added
+    // by a person) whose text starts with "Didit:", the untranslated prefix every one of
+    // them used; a merchant's own note never has WooCommerce as its author.
+    $legacy = get_comments([
+      'post_id' => $order_id,
+      'type' => 'order_note',
+      'status' => 'any',
+      'number' => 0,
+    ]);
     if ($removed) {
       add_filter('comments_clauses', $filter, 10, 1);
     }
+    $ids = (array) $ids;
+    foreach ((array) $legacy as $note) {
+      if (is_object($note) && self::is_legacy_note($note)) {
+        $ids[] = (int) $note->comment_ID;
+      }
+    }
     $deleted = 0;
-    foreach ((array) $ids as $id) {
+    foreach (array_unique(array_map('intval', $ids)) as $id) {
       $deleted += wp_delete_comment((int) $id, true) ? 1 : 0;
     }
     return $deleted;
+  }
+
+  /** An unmarked note an earlier version of the plugin added. */
+  public static function is_legacy_note($note): bool
+  {
+    return 'WooCommerce' === (string) ($note->comment_author ?? '')
+      && 0 === strpos((string) ($note->comment_content ?? ''), 'Didit:');
   }
 
   /** Each reason has its own meta key, so two checks saving the order never overwrite each other's reason. */
