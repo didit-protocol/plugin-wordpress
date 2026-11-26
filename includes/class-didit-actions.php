@@ -581,7 +581,8 @@ final class Didit_Verify_Actions
   /**
    * The order key alone is not enough: the request must also carry the access token that
    * contact_box() only hands out after WooCommerce's own order-detail checks passed
-   * (see customer_can_access()), and an order with an account needs its logged-in owner.
+   * (only on WooCommerce's authorized order-detail path), and an order with an account needs
+   * its logged-in owner.
    */
   public static function contact_permission($request)
   {
@@ -633,8 +634,8 @@ final class Didit_Verify_Actions
     }
     $prefix = '';
     if (function_exists('WC') && WC()->countries && is_callable([WC()->countries, 'get_country_calling_code'])) {
+      // A string such as '+44' or '+441534', or a list such as ['+1787', '+1939'].
       $prefix = WC()->countries->get_country_calling_code($order->get_billing_country());
-      $prefix = is_array($prefix) ? (string) reset($prefix) : (string) $prefix;
     }
     return self::phone_e164((string) $order->get_billing_phone(), (string) $order->get_billing_country(), $prefix);
   }
@@ -647,23 +648,31 @@ final class Didit_Verify_Actions
   const NO_TRUNK = ['CY', 'CZ', 'DK', 'EE', 'ES', 'GR', 'HK', 'IS', 'LU', 'LV', 'MO', 'MT', 'NO', 'PL', 'PT', 'SG'];
   /** Countries whose leading 0 is part of the number and is kept after the country code. */
   const KEEP_ZERO = ['IT', 'SM', 'VA'];
-  /** North American Numbering Plan members with WooCommerce calling code +1. */
-  const NANP = ['US', 'CA', 'PR', 'VI', 'GU', 'AS', 'MP'];
+  /**
+   * WooCommerce gives some countries their country code plus an area prefix (Jersey
+   * +441534, Guernsey +441481, Isle of Man +441624). The country code is the part before
+   * the prefix; the prefix is already part of a full national number.
+   */
+  const SHARED_CODE = ['GG' => '44', 'IM' => '44', 'JE' => '44'];
 
   /**
    * Convert a billing phone to E.164 without guessing. Numbers written with + or 00 are
    * taken as international. National numbers are converted only for countries whose
    * trunk-prefix rule is known (a trunk 0 is dropped, Italy's leading 0 is kept); anything
    * else returns '' so no code is sent to a possibly different number.
+   *
+   * @param string|string[] $calling_code WooCommerce calling code(s) of the billing country.
    */
-  public static function phone_e164(string $raw, string $country, string $calling_code): string
+  public static function phone_e164(string $raw, string $country, $calling_code): string
   {
     $raw = trim($raw);
     $digits = (string) preg_replace('/\D+/', '', $raw);
-    $code = (string) preg_replace('/\D+/', '', $calling_code);
+    $codes = array_values(array_filter(array_map(function ($code) {
+      return (string) preg_replace('/\D+/', '', (string) $code);
+    }, (array) $calling_code)));
     $country = strtoupper($country);
     if ('VA' === $country) {
-      $code = '39';
+      $codes = ['39'];
     }
     $number = '';
     if ('' === $digits) {
@@ -672,20 +681,39 @@ final class Didit_Verify_Actions
       $number = $digits;
     } elseif (0 === strpos($digits, '00')) {
       $number = substr($digits, 2);
-    } elseif ('' === $code) {
+    } elseif (!$codes) {
       return '';
-    } elseif (in_array($country, self::KEEP_ZERO, true)) {
-      $number = $code . $digits;
-    } elseif (in_array($country, self::NANP, true) && '1' === $code) {
+    } elseif ('1' === $codes[0][0]) {
+      // North American Numbering Plan (+1, and territories such as +1787 or +1671): the
+      // national number is a 3-digit area code and 7 digits.
+      $areas = array_values(array_filter(array_map(function ($code) {
+        return substr($code, 1);
+      }, $codes)));
       if (10 === strlen($digits) && '1' !== $digits[0]) {
         $number = '1' . $digits;
       } elseif (11 === strlen($digits) && '1' === $digits[0]) {
         $number = $digits;
+      } elseif (7 === strlen($digits) && 1 === count($areas) && 3 === strlen($areas[0])) {
+        $number = '1' . $areas[0] . $digits;
       }
+    } elseif (count($codes) > 1) {
+      return '';
+    } elseif (in_array($country, self::KEEP_ZERO, true)) {
+      $number = $codes[0] . $digits;
+    } elseif (isset(self::SHARED_CODE[$country])) {
+      $base = self::SHARED_CODE[$country];
+      $area = 0 === strpos($codes[0], $base) ? substr($codes[0], strlen($base)) : '';
+      $national = '0' === $digits[0] ? substr($digits, 1) : $digits;
+      // A full national number (10 digits, e.g. 01534 123456 or 07797 123456) already
+      // carries its area; a 6-digit local number gets the island's area prefix.
+      if (6 === strlen($national) && '' !== $area) {
+        $national = $area . $national;
+      }
+      $number = $base . $national;
     } elseif (in_array($country, self::TRUNK_ZERO, true)) {
-      $number = $code . ('0' === $digits[0] ? substr($digits, 1) : $digits);
+      $number = $codes[0] . ('0' === $digits[0] ? substr($digits, 1) : $digits);
     } elseif (in_array($country, self::NO_TRUNK, true) && '0' !== $digits[0]) {
-      $number = $code . $digits;
+      $number = $codes[0] . $digits;
     }
     $length = strlen($number);
     return $length >= 8 && $length <= 15 && '0' !== $number[0] ? '+' . $number : '';
@@ -746,7 +774,8 @@ final class Didit_Verify_Actions
 
   private static function consume(array $buckets): bool
   {
-    if (!self::lock()) {
+    $token = Didit_Verify_Lock::acquire(self::LOCK, 30);
+    if ('' === $token) {
       return false;
     }
     $now = time();
@@ -764,47 +793,11 @@ final class Didit_Verify_Actions
         set_transient($key, $bucket, max(1, $bucket[1] - $now));
       }
     }
-    self::unlock();
+    Didit_Verify_Lock::release(self::LOCK, $token);
     return $ok;
   }
 
   const LOCK = 'didit_contact_lock';
-
-  /** An options row inserted with INSERT IGNORE is an atomic mutex; a lock older than 30 s is stale. */
-  private static function lock(): bool
-  {
-    global $wpdb;
-    for ($i = 0; $i < 20; $i++) {
-      if (is_object($wpdb) && isset($wpdb->options)) {
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- an atomic insert is the point; the row is never cached.
-        $got = 1 === (int) $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::LOCK, (string) time()));
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-        $since = $got ? 0 : (int) $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::LOCK));
-      } else {
-        $got = add_option(self::LOCK, (string) time(), '', 'no');
-        $since = $got ? 0 : (int) get_option(self::LOCK, 0);
-      }
-      if ($got) {
-        return true;
-      }
-      if ($since && $since < time() - 30) {
-        self::unlock();
-        continue;
-      }
-      usleep(50000);
-    }
-    return false;
-  }
-
-  private static function unlock()
-  {
-    global $wpdb;
-    if (is_object($wpdb) && isset($wpdb->options)) {
-      $wpdb->delete($wpdb->options, ['option_name' => self::LOCK]); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-    } else {
-      delete_option(self::LOCK);
-    }
-  }
 
   private static function international_error(): WP_Error
   {
@@ -887,16 +880,11 @@ final class Didit_Verify_Actions
   }
 
   /**
-   * Show contact details only where WooCommerce itself shows the order details:
-   *
-   * - An order placed with an account: only its logged-in owner. WooCommerce asks anyone
-   *   else to log in (filter woocommerce_order_received_verify_known_shoppers); we never
-   *   show the contacts to them, even when that filter is turned off.
-   * - A guest order: a valid order key in the URL AND no pending email check. WooCommerce
-   *   asks for the billing email (classic and block confirmation) unless the order is in
-   *   the visitor's session, was placed within the grace period, or the email was entered;
-   *   we ask WooCommerce for that decision and, on versions without the helper, apply the
-   *   same signals conservatively. When unsure, the box is hidden.
+   * Defence in depth for the hooks that render the box. Those hooks already run only on
+   * WooCommerce's authorized order-detail path (its email check for guests, its login
+   * check for account orders); this adds that an order placed with an account is shown
+   * only to its logged-in owner (even when woocommerce_order_received_verify_known_shoppers
+   * is turned off), and that a guest order needs its own key in the URL.
    */
   public static function customer_can_access($order): bool
   {
@@ -908,42 +896,13 @@ final class Didit_Verify_Actions
       return get_current_user_id() === $customer_id;
     }
     $url_key = isset($_GET['key']) ? sanitize_text_field(wp_unslash($_GET['key'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- capability check, not a state change.
-    if ('' === $url_key || !hash_equals($order->get_order_key(), $url_key)) {
-      return false;
-    }
-    return !self::guest_email_check_required($order);
+    return '' !== $url_key && hash_equals($order->get_order_key(), $url_key);
   }
 
-  private static function guest_email_check_required($order): bool
-  {
-    if (is_callable(['WC_Shortcode_Checkout', 'guest_should_verify_email'])) {
-      // Also honours the email posted to WooCommerce's own verification form.
-      return (bool) WC_Shortcode_Checkout::guest_should_verify_email($order, 'order-received');
-    }
-    $users = 'Automattic\\WooCommerce\\Utilities\\Users';
-    if (is_callable([$users, 'should_user_verify_order_email'])) {
-      return (bool) call_user_func([$users, 'should_user_verify_order_email'], (int) $order->get_id(), null, 'order-received');
-    }
-    // Older WooCommerce: the same signals as the block confirmation page.
-    $session = function_exists('WC') && is_object(WC()) && isset(WC()->session) ? WC()->session : null;
-    if (is_object($session) && is_callable([$session, 'get'])) {
-      if ((int) $order->get_id() === (int) $session->get('store_api_draft_order')) {
-        return false;
-      }
-      $customer = $session->get('customer');
-      $email = is_array($customer) ? (string) ($customer['email'] ?? '') : '';
-      if ('' !== $email && '' !== (string) $order->get_billing_email() && 0 === strcasecmp($email, (string) $order->get_billing_email())) {
-        return false;
-      }
-    }
-    $created = is_callable([$order, 'get_date_created']) ? $order->get_date_created() : null;
-    $grace = (int) apply_filters('woocommerce_order_email_verification_grace_period', 10 * MINUTE_IN_SECONDS, $order, 'order-received');
-    if (is_object($created) && method_exists($created, 'getTimestamp') && time() - $created->getTimestamp() <= $grace) {
-      return false;
-    }
-    return (bool) apply_filters('woocommerce_order_email_verification_required', true, $order, 'order-received');
-  }
-
+  /**
+   * Build the box. Call it only from a hook WooCommerce runs after its own order-detail
+   * checks (see wc_hooks()); it is not an authorization check on its own.
+   */
   public static function contact_box($order): string
   {
     static $rendered = [];
@@ -1014,10 +973,13 @@ final class Didit_Verify_Actions
     echo self::contact_box(wc_get_order($order_id)); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built.
   }
 
+  /** render_block filter of the confirmation summary: empty content means WooCommerce withheld the details. */
   public static function contact_box_block($content)
   {
-    global $wp;
-    $order = wc_get_order(absint($wp->query_vars['order-received'] ?? 0));
+    if ('' === trim((string) $content) || !function_exists('get_query_var')) {
+      return $content;
+    }
+    $order = wc_get_order(absint(get_query_var('order-received')));
     return $order ? $content . self::contact_box($order) : $content;
   }
 }
