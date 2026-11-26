@@ -29,6 +29,9 @@ jobs:
       - run: php tests/test-sign-in.php
       - run: php tests/test-uninstall.php
       - run: php tests/test-erasure.php
+      - run: php tests/test-workflows.php
+      - name: Checkout script keeps each placement's verification apart
+        run: node tests/test-verify-js.mjs
       - name: Release zip leaves development files out
         run: |
           bin/build-zip.sh

@@ -2998,8 +2998,12 @@ final class Didit_Verify
   {
     $removed = false;
     $sessions = [(string) $order->get_meta('_didit_session_id'), (string) $order->get_meta('_didit_confirmed_session_id')];
+    // A screening still queued would send the billing name to Didit and store a new
+    // result after this erasure, so it is cancelled first.
+    Didit_Verify_Actions::cancel_screening((int) $order->get_id());
     $keys = ['_didit_session_id', '_didit_session_url', '_didit_status', '_didit_confirmed_session_id', '_didit_verified_at', Didit_Verify_Report::META,
-      '_didit_aml', '_didit_aml_requested', '_didit_aml_runs', '_didit_hold_reasons', '_didit_held', '_didit_held_from', '_didit_hold_released', '_didit_reminder_count'];
+      '_didit_aml', '_didit_aml_requested', '_didit_aml_runs', '_didit_hold_reasons', Didit_Verify_Actions::hold_key('identity'), Didit_Verify_Actions::hold_key('aml'),
+      '_didit_held', '_didit_held_from', '_didit_hold_released', '_didit_reminder_count'];
     foreach (['phone', 'email'] as $channel) {
       foreach (['status', 'verified_hash', 'sent_hash'] as $suffix) {
         $keys[] = '_didit_' . $channel . '_' . $suffix;
@@ -3267,8 +3271,9 @@ final class Didit_Verify
    * Records the identity reason when a fulfillment transition (processing or completed)
    * happens before approval; Didit_Verify_Actions::enforce_holds() then holds the order for
    * every outstanding reason (identity and AML). It is also hooked on its own, so AML holds
-   * apply without after-purchase verification. A hold the merchant released by hand is not
-   * re-applied for identity (`_didit_hold_released`).
+   * apply without after-purchase verification. Only the "Release Didit hold" order action
+   * sets `_didit_hold_released`: a payment or any other automatic status change is never
+   * taken as the merchant's override.
    */
   public function wc_maybe_hold_order($order_id, $from, $to, $order)
   {
