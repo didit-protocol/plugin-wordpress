@@ -22,6 +22,7 @@ define('DIDIT_VERIFY_VERSION', '0.4.0');
 define('DIDIT_VERIFY_URL', plugin_dir_url(__FILE__));
 define('DIDIT_API_URL', 'https://verification.didit.me/v3/session/');
 
+require_once __DIR__ . '/includes/class-didit-lock.php';
 require_once __DIR__ . '/includes/class-didit-api.php';
 require_once __DIR__ . '/includes/class-didit-workflows.php';
 require_once __DIR__ . '/includes/class-didit-report.php';
