@@ -4,7 +4,7 @@ Tags: identity verification, kyc, woocommerce, age verification, id check
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.3.5
+Stable tag: 0.3.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -215,6 +215,9 @@ When the camera cannot start inside a frame, for example the liveness step on so
 
 == Changelog ==
 
+= 0.3.6 =
+* Fix: on Android Chrome the camera no longer fails inside the verification frame when the site's Permissions-Policy header blocks it (for example `camera=()` from a security plugin or CDN). Chrome applies that header to every frame on the page and refuses the camera without a prompt; Safari ignores it, so iPhones were not affected. When the browser reports the camera as blocked, the plugin now opens Didit's hosted page instead of the modal or embedded frame, and the shopper returns to the same page with the checkout session kept. To keep the frame, allow the verification origin in the header, for example `camera=(self "https://verify.didit.me"), microphone=(self "https://verify.didit.me")`.
+
 = 0.3.5 =
 * Fix: retrying verification no longer creates another session or spends the visitor's hourly limit. The plugin reopens the session this browser (or this WooCommerce order) is already in, so a shopper can keep retrying until the flow completes. Before reopening a session the plugin asks Didit for its current status, so approved, declined, abandoned and expired sessions start a new verification, and the creation limit still stops a runaway loop.
 * New Redirect display mode: the verification runs on Didit's hosted page instead of inside a frame, the way out of camera or liveness failures inside an iframe on Android Chrome. The shopper returns to the page where they started; the plugin then confirms the result and keeps the checkout session.
@@ -304,6 +307,9 @@ When the camera cannot start inside a frame, for example the liveness step on so
 * 49 language options for the verification UI.
 
 == Upgrade Notice ==
+
+= 0.3.6 =
+Fixes the Android Chrome camera error at the liveness step on sites whose Permissions-Policy header blocks the camera.
 
 = 0.3.4 =
 Security update for protected content: revocations now apply to the verification granting access even when another attempt is pending.

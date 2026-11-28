@@ -64,6 +64,25 @@
     }
   }
 
+  // Chrome applies this page's Permissions-Policy header to every frame on it, so with
+  // camera=() the camera inside the verification frame is refused without a prompt,
+  // whatever the frame's allow attribute says. The hosted page, opened at the top
+  // level, is not bound by this page's header. Browsers without the API (Safari,
+  // Firefox) do not enforce the header for frames, so they keep the frame.
+  function cameraBlocked() {
+    var policy = document.permissionsPolicy || document.featurePolicy;
+    if (!policy || typeof policy.allowsFeature !== "function") return false;
+    try {
+      return !policy.allowsFeature("camera");
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function opensHostedPage(btn) {
+    return btn.dataset.display === "redirect" || cameraBlocked();
+  }
+
   function returnedSessionId() {
     var id = "";
     try {
@@ -246,7 +265,7 @@
         requestBody.order_id = btn.dataset.orderId;
         requestBody.order_key = btn.dataset.orderKey || "";
       }
-      if (btn.dataset.display === "redirect") {
+      if (opensHostedPage(btn)) {
         requestBody.return_url = pageUrl();
       }
 
@@ -284,7 +303,7 @@
 
   function startSdk(url, btn, sessionId) {
     // The server marks every redirect button, so a shortcode's own mode always wins.
-    if (btn.dataset.display === "redirect") {
+    if (opensHostedPage(btn)) {
       // The hosted page is the only place a blocked camera can recover the flow.
       if (sessionId) rememberSession(sessionId);
       window.location.assign(url);
