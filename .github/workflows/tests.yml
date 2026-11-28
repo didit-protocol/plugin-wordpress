@@ -21,3 +21,12 @@ jobs:
       - run: php tests/test-checkout-retry.php
       - run: php tests/test-redirect-fallback.php
       - run: php tests/test-iframe-permissions.php
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/js/didit-verify.js
+      - run: node tests/test-camera-policy-fallback.mjs
